@@ -262,6 +262,8 @@ async fn copy_file(
         "Fișierul s-a modificat în timpul copierii: {}",
         from.display()
     );
+    // Release the source's read lock before flushing and verifying the destination.
+    drop(input);
     output.sync_all().await?;
     let output = output.into_std().await;
     output.set_times(std::fs::FileTimes::new().set_modified(modified))?;
@@ -326,7 +328,7 @@ pub async fn backup(engine: &Engine, plan: &Plan) -> Result<(String, String)> {
     })?;
     if plan.mode.archive_name().is_some() {
         let m: Manifest = read_json(&staging.join(MANIFEST)).await?;
-        crate::archive::create(engine, plan.mode, &staging, m.clone())
+        let m = crate::archive::create(engine, plan.mode, &staging, m)
             .await
             .with_context(|| {
                 format!(

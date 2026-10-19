@@ -33,3 +33,5 @@ and Go dependencies in the final release artifact as well.
 
 Archive creation and reading are implemented with zip (MIT), tar and flate2 (MIT/Apache-2.0), sevenz-rust2 (Apache-2.0).
 New dependency license texts are included in ARCHIVE-LICENSES.txt. Exact versions and checksums are in Cargo.lock.
+
+GPU rendering uses Iced/wgpu with tiny-skia as a software fallback. Graphics license texts are included in GRAPHICS-LICENSES.txt.

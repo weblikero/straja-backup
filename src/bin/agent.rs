@@ -3,6 +3,9 @@ use std::path::PathBuf;
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
+    if straja::updater::running() && !args.iter().any(|a| a == "--service" || a == "--status") {
+        return Ok(());
+    }
     if args.iter().any(|a| a == "--tray") {
         return straja::tray::run();
     }
@@ -20,7 +23,12 @@ fn main() -> Result<()> {
     let restic = value("--restic")
         .map(Ok)
         .unwrap_or_else(straja::engine::Engine::bundled)?;
-    let runtime = tokio::runtime::Runtime::new()?;
+    if !args.iter().any(|a| a == "--status")
+        && let Err(e) = straja::resources::background_process()
+    {
+        eprintln!("Background resource priority: {e}");
+    }
+    let runtime = straja::resources::runtime()?;
     runtime.block_on(async {
         if args.iter().any(|a| a == "--status") {
             println!(

@@ -297,6 +297,41 @@ pub struct State {
     pub engine_available: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LastOutcome {
+    pub plan_name: String,
+    pub outcome: String,
+}
+
+/// Tray health checks never transfer source paths, exclusions or full history.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AgentStatus {
+    pub agent_version: String,
+    pub plan_count: u64,
+    pub last_outcome: Option<LastOutcome>,
+    pub active: Option<Progress>,
+    pub service_mode: bool,
+}
+
+impl From<State> for AgentStatus {
+    fn from(state: State) -> Self {
+        Self {
+            agent_version: state.agent_version,
+            plan_count: state.plans.len() as u64,
+            last_outcome: state
+                .history
+                .into_iter()
+                .find(|r| r.finished.is_some())
+                .map(|r| LastOutcome {
+                    plan_name: r.plan_name,
+                    outcome: r.outcome,
+                }),
+            active: state.active,
+            service_mode: state.service_mode,
+        }
+    }
+}
+
 pub fn validate_retention(keep: Option<u32>) -> Result<()> {
     if keep.is_some_and(|n| !(1..=10000).contains(&n)) {
         bail!("Numărul de copii trebuie să fie între 1 și 10000, sau alege Păstrează toate.");

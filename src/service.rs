@@ -44,6 +44,10 @@ fn run() -> Result<()> {
         process_id: None,
     };
     handle.set_service_status(status(ServiceState::StartPending, 0))?;
+    if crate::updater::running() {
+        handle.set_service_status(status(ServiceState::Stopped, 0))?;
+        return Ok(());
+    }
     let args: Vec<String> = std::env::args().collect();
     let root = args
         .windows(2)
@@ -52,7 +56,10 @@ fn run() -> Result<()> {
         .map(Ok)
         .unwrap_or_else(crate::security::data_dir)?;
     let restic = crate::engine::Engine::bundled()?;
-    let runtime = tokio::runtime::Runtime::new()?;
+    if let Err(e) = crate::resources::background_process() {
+        eprintln!("Background resource priority: {e}");
+    }
+    let runtime = crate::resources::runtime()?;
     handle.set_service_status(status(ServiceState::Running, 0))?;
     let result = runtime.block_on(crate::worker::run(root, restic, true, rx));
     handle.set_service_status(status(

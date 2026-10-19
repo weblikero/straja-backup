@@ -4,7 +4,7 @@ use iced::{
     Color, Element, Fill, Length, Task, Theme,
     widget::{
         button, checkbox, column, container, pick_list, progress_bar, row, scrollable, svg,
-        text as raw_text, text_input,
+        text as raw_text, text_input, tooltip,
     },
 };
 use std::{path::PathBuf, time::Duration};
@@ -20,15 +20,35 @@ fn text<'a>(value: impl AsRef<str>) -> iced::widget::Text<'a> {
     raw_text(tr(value))
 }
 
+struct GuiExecutor(tokio::runtime::Runtime);
+impl iced::Executor for GuiExecutor {
+    fn new() -> std::io::Result<Self> {
+        straja::resources::runtime().map(Self)
+    }
+    fn spawn(&self, future: impl std::future::Future<Output = ()> + Send + 'static) {
+        drop(self.0.spawn(future));
+    }
+    fn enter<R>(&self, f: impl FnOnce() -> R) -> R {
+        let _guard = self.0.enter();
+        f()
+    }
+    fn block_on<T>(&self, future: impl std::future::Future<Output = T>) -> T {
+        self.0.block_on(future)
+    }
+}
+
 const INK: Color = Color::from_rgb(0.10, 0.16, 0.25);
 const MUTED: Color = Color::from_rgb(0.40, 0.45, 0.53);
 const BLUE: Color = Color::from_rgb(0.18, 0.35, 0.86);
 const CREATOR_URL: &str = "https://weblike.ro/";
 
 fn creator_logo(width: f32) -> Element<'static, Message> {
-    let logo = svg(svg::Handle::from_memory(include_bytes!(
-        "../installer/assets/weblike-pro.svg"
-    )))
+    static LOGO: std::sync::OnceLock<svg::Handle> = std::sync::OnceLock::new();
+    let logo = svg(LOGO
+        .get_or_init(|| {
+            svg::Handle::from_memory(include_bytes!("../installer/assets/weblike-pro.svg"))
+        })
+        .clone())
     .width(width)
     .height(width * 54.0 / 301.0);
     button(container(logo).padding(10).style(|_| container::Style {
@@ -83,26 +103,35 @@ fn app_theme(_: &App) -> Theme {
     )
 }
 
-pub fn run() -> iced::Result {
-    iced::application(App::new, App::update, App::view)
-        .title("Straja Backup")
-        .theme(app_theme)
-        .subscription(|_: &App| iced::time::every(Duration::from_secs(2)).map(|_| Message::Tick))
-        .window(iced::window::Settings {
-            size: (1120., 780.).into(),
-            icon: iced::window::icon::from_rgba(
+const WINDOW_TITLE: &str = concat!("Straja Backup — v", env!("CARGO_PKG_VERSION"));
+
+fn window_settings() -> iced::window::Settings {
+    iced::window::Settings {
+        size: (1120., 780.).into(),
+        icon: Some(
+            iced::window::icon::from_rgba(
                 include_bytes!("../installer/assets/straja.rgba").to_vec(),
                 128,
                 128,
             )
-            .ok(),
-            ..Default::default()
-        })
+            .expect("Embedded Straja icon must contain 128 × 128 RGBA pixels"),
+        ),
+        ..Default::default()
+    }
+}
+
+pub fn run() -> iced::Result {
+    iced::application(App::new, App::update, App::view)
+        .executor::<GuiExecutor>()
+        .title(WINDOW_TITLE)
+        .theme(app_theme)
+        .subscription(|app: &App| iced::time::every(app.poll_interval()).map(|_| Message::Tick))
+        .window(window_settings())
         .run()
 }
 
 // Debug-only visual fixture: no IPC, tray, real settings, file pickers or backup operations.
-#[cfg(debug_assertions)]
+#[cfg(any(debug_assertions, feature = "ui-preview"))]
 pub fn preview() -> iced::Result {
     iced::application(
         || {
@@ -117,10 +146,16 @@ pub fn preview() -> iced::Result {
                 app.update_checking = false;
                 app.update_attempt = std::time::Instant::now() - Duration::from_secs(61);
                 app.update_result = Some(Ok(Some(Update {
-                    version: "0.5.0".into(),
+                    version: "0.6.0".into(),
+                    installer: Some(updates::Installer {url: String::new(), size: 1234, sha256: "a".repeat(64)}),
                     notes: "Preview release notes\n• Update notifications\n• Backup improvements".into(),
                     page_url: "https://github.com/weblikero/straja-backup/releases".into(),
                 })));
+                if std::env::args().any(|arg| arg == "--preview-update-confirmation") {
+                    let update = app.update_result.as_ref().unwrap().as_ref().unwrap().as_ref().unwrap().clone();
+                    app.prepared_update = Some(updates::PreparedUpdate {update, path: PathBuf::from("preview-only.exe")});
+                    app.install_confirmation = true;
+                }
             }
             app.state.plans.push(Plan {
                 mode: BackupMode::Plain, id: "preview".into(), name: "My projects · Grüße".into(),
@@ -137,26 +172,110 @@ pub fn preview() -> iced::Result {
                 outcome: "Eroare".into(),
                 detail: r"Backup nefinalizat. Copia parțială se află în E:\Backups\Projects\.in-progress-test; versiunile anterioare sunt intacte.: Legătură/junction/reparse point neacceptat: C:\Example\Projects\public\build. Alege folderul real sau exclude legătura.".into(),
             });
+            if std::env::args().any(|arg| arg == "--preview-plans") {
+                app.state.plans[0].excluded_paths = (0..60).map(|n| PathBuf::from(format!(r"C:\Example\Projects\project-{n}\cache"))).collect();
+                app.state.plans[0].sources.push(PathBuf::from(r"C:\Example\Shared"));
+                let mut second = app.state.plans[0].clone();
+                second.id = "preview-photos".into();
+                second.name = "Photos".into();
+                second.sources = vec![PathBuf::from(r"C:\Example\Pictures")];
+                second.repository = PathBuf::from(r"E:\Backups\Pictures");
+                second.last_success = Some(chrono::Utc::now());
+                second.excluded_paths.clear();
+                second.excludes.clear();
+                second.enabled = false;
+                app.state.plans.push(second);
+                let mut third = app.state.plans[1].clone();
+                third.id = "preview-documents".into();
+                third.name = "Documents".into();
+                third.sources = vec![PathBuf::from(r"C:\Example\A very long folder name with Unicode Grüße\Customer documents\Archive\Documents")];
+                third.repository = PathBuf::from(r"E:\Backups\A very long destination folder name\Documents");
+                third.enabled = true;
+                third.last_success = None;
+                third.next_due = None;
+                third.schedule = Schedule::Manual;
+                app.state.plans.push(third);
+            }
+            if let Some(output) = std::env::args_os().skip_while(|a| a != "--scroll-probe").nth(1) {
+                app.page = Page::History;
+                let run = app.state.history[0].clone();
+                app.state.history = (0..100).map(|n| Run {id: format!("probe-{n}"), ..run.clone()}).collect();
+                app.scroll_probe = Some(ScrollProbe {output: output.into(), frames: 0, previous: None, intervals: Vec::new()});
+            }
+            if std::env::args().any(|arg| arg == "--preview-plan-details") {
+                app.expanded_plan = Some("preview".into());
+            }
+            if let Some(code) = std::env::args().skip_while(|arg| arg != "--preview-language").nth(1) {
+                i18n::set(Language::from_code(&code));
+            }
             (app, Task::none())
         },
         |app: &mut App, message| {
             match message {
+                Message::ProbeFrame(at) => {
+                    if let Some(probe) = &mut app.scroll_probe {
+                        return probe.frame(at);
+                    }
+                }
                 Message::Language(language) => i18n::set(language),
                 Message::Next => { if let Some(w) = &mut app.wizard { w.step = (w.step+1).min(3); } }
-                message @ (Message::Page(_) | Message::Edit(_) | Message::New | Message::CloseWizard
+                message @ (Message::Page(_) | Message::Edit(_) | Message::TogglePlanDetails(_) | Message::New | Message::CloseWizard
                     | Message::Back | Message::ExcludeErrorPath(_) | Message::ManualExclusion(_)
                     | Message::EditExclusion(_) | Message::CancelExclusion | Message::SaveExclusion
                     | Message::RemoveExclusion(_) | Message::Name(_) | Message::Mode(_) | Message::Frequency(_)
                     | Message::Day(_) | Message::Time(_) | Message::Interval(_) | Message::KeepAll(_)
-                    | Message::KeepCount(_)) => { return app.update(message); }
+                    | Message::KeepCount(_) | Message::AskInstallUpdate | Message::LaterUpdate) => { return app.update(message); }
                 _ => {}
             }
             Task::none()
         }, App::view)
-        .title("Straja Backup — Localization preview")
+        .executor::<GuiExecutor>()
+        .title(concat!("Straja Backup — v", env!("CARGO_PKG_VERSION"), " — Preview"))
         .theme(app_theme)
-        .window_size((1120., 780.))
+        .subscription(|app: &App| if app.scroll_probe.is_some() { iced::window::frames().map(Message::ProbeFrame) } else { iced::Subscription::none() })
+        .window(window_settings())
         .run()
+}
+
+// Synthetic scroll cadence only; never enabled in the installed release or normal preview.
+#[cfg(any(debug_assertions, feature = "ui-preview"))]
+struct ScrollProbe {
+    output: PathBuf,
+    frames: usize,
+    previous: Option<std::time::Instant>,
+    intervals: Vec<f64>,
+}
+#[cfg(any(debug_assertions, feature = "ui-preview"))]
+impl ScrollProbe {
+    fn frame(&mut self, at: std::time::Instant) -> Task<Message> {
+        self.frames += 1;
+        if let Some(previous) = self.previous
+            && self.frames > 120
+        {
+            self.intervals
+                .push(at.saturating_duration_since(previous).as_secs_f64() * 1000.0);
+        }
+        self.previous = Some(at);
+        if self.intervals.len() >= 180 {
+            self.intervals.sort_by(f64::total_cmp);
+            let report = serde_json::json!({
+                "version": env!("CARGO_PKG_VERSION"),
+                "requested_backend": std::env::var("ICED_BACKEND").unwrap_or_else(|_| "automatic".into()),
+                "sample_frames": self.intervals.len(), "warmup_frames": 120, "history_rows": 100,
+                "mean_frame_ms": self.intervals.iter().sum::<f64>() / self.intervals.len() as f64,
+                "p95_frame_ms": self.intervals[170], "max_frame_ms": self.intervals.last(),
+            });
+            std::fs::write(
+                &self.output,
+                serde_json::to_vec_pretty(&report).expect("probe JSON"),
+            )
+            .expect("write isolated scroll probe report");
+            return iced::exit();
+        }
+        let phase = self.frames % 240;
+        let y = if phase < 120 { phase } else { 240 - phase } as f32 * 40.0;
+        iced::widget::operation::scroll_to("main-content", scrollable::AbsoluteOffset { x: 0.0, y })
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -209,9 +328,17 @@ impl std::fmt::Display for Day {
 }
 #[derive(Debug, Clone)]
 enum Message {
+    #[cfg(any(debug_assertions, feature = "ui-preview"))]
+    ProbeFrame(std::time::Instant),
+    DownloadUpdate,
+    CancelDownload,
+    UpdateDownloaded(Result<updates::PreparedUpdate, String>),
+    AskInstallUpdate,
+    ConfirmInstallUpdate,
+    LaterUpdate,
+    UpdaterLaunched(Result<(), String>),
     CheckUpdates,
     UpdatesChecked(Result<Option<Update>, CheckError>),
-    OpenUpdate,
     Language(Language),
     OpenProductSite,
     CopyText(String),
@@ -232,6 +359,7 @@ enum Message {
     Reply(Result<Response, String>),
     New,
     Edit(String),
+    TogglePlanDetails(String),
     CloseWizard,
     Next,
     Back,
@@ -498,10 +626,20 @@ impl Wizard {
 }
 
 struct App {
+    #[cfg(any(debug_assertions, feature = "ui-preview"))]
+    scroll_probe: Option<ScrollProbe>,
+    download_progress: Option<std::sync::Arc<updates::DownloadProgress>>,
+    prepared_update: Option<updates::PreparedUpdate>,
+    update_error: Option<String>,
+    install_waiting: bool,
+    install_starting: bool,
+    install_confirmation: bool,
+    update_dismissed: bool,
     update_checking: bool,
     update_result: Option<Result<Option<Update>, CheckError>>,
     update_attempt: std::time::Instant,
     delete_plan: Option<String>,
+    expanded_plan: Option<String>,
     delete_acknowledged: bool,
     pending_run: Option<Run>,
     notice_run: Option<Run>,
@@ -525,12 +663,37 @@ fn rpc(request: Request) -> Task<Message> {
     )
 }
 impl App {
+    fn poll_interval(&self) -> Duration {
+        if self.state.active.is_some()
+            || self.pending_run.is_some()
+            || self.busy
+            || self.download_progress.is_some()
+            || self.install_waiting
+            || self.install_starting
+        {
+            straja::resources::ACTIVE_POLL
+        } else if !self.connected {
+            Duration::from_secs(5)
+        } else {
+            straja::resources::IDLE_UI_POLL
+        }
+    }
     fn new() -> (Self, Task<Message>) {
         let mut app = Self {
+            #[cfg(any(debug_assertions, feature = "ui-preview"))]
+            scroll_probe: None,
+            download_progress: None,
+            prepared_update: None,
+            update_error: None,
+            install_waiting: false,
+            install_starting: false,
+            install_confirmation: false,
+            update_dismissed: false,
             update_checking: true,
             update_result: None,
             update_attempt: std::time::Instant::now(),
             delete_plan: None,
+            expanded_plan: None,
             delete_acknowledged: false,
             pending_run: None,
             notice_run: None,
@@ -568,10 +731,91 @@ impl App {
         )
     }
     fn update(&mut self, message: Message) -> Task<Message> {
+        // Once the helper owns the handoff, never open a new unsaved form or start work.
+        if self.install_starting
+            && !matches!(
+                &message,
+                Message::UpdaterLaunched(_) | Message::Tick | Message::Refresh(_)
+            )
+        {
+            return Task::none();
+        }
         match message {
-            Message::CheckUpdates => {
-                if !self.update_checking && self.update_attempt.elapsed() >= Duration::from_secs(60)
+            #[cfg(any(debug_assertions, feature = "ui-preview"))]
+            Message::ProbeFrame(_) => {}
+            Message::DownloadUpdate => {
+                if self.download_progress.is_none()
+                    && !self.install_starting
+                    && let Some(Ok(Some(update))) = &self.update_result
+                    && update.installer.is_some()
                 {
+                    let update = update.clone();
+                    let progress = std::sync::Arc::new(updates::DownloadProgress::default());
+                    self.download_progress = Some(progress.clone());
+                    self.update_error = None;
+                    return Task::perform(
+                        async move {
+                            updates::download(update, progress)
+                                .await
+                                .map_err(|e| format!("{e:#}"))
+                        },
+                        Message::UpdateDownloaded,
+                    );
+                }
+            }
+            Message::CancelDownload => {
+                if let Some(progress) = &self.download_progress {
+                    progress
+                        .cancelled
+                        .store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+            }
+            Message::UpdateDownloaded(result) => {
+                self.download_progress = None;
+                match result {
+                    Ok(prepared) => self.prepared_update = Some(prepared),
+                    Err(error) => self.update_error = Some(error),
+                }
+            }
+            Message::AskInstallUpdate => {
+                if self.prepared_update.is_some() && self.wizard.is_none() && !self.install_starting
+                {
+                    self.install_confirmation = true;
+                    self.update_dismissed = false;
+                }
+            }
+            Message::ConfirmInstallUpdate => {
+                if self.install_confirmation && self.wizard.is_none() {
+                    self.install_confirmation = false;
+                    self.install_waiting = true;
+                    return self.start_update();
+                }
+            }
+            Message::LaterUpdate => {
+                if !self.install_starting {
+                    self.install_waiting = false;
+                    self.install_confirmation = false;
+                    self.update_dismissed = true;
+                }
+            }
+            Message::UpdaterLaunched(result) => match result {
+                Ok(()) => return iced::exit(),
+                Err(error) => {
+                    self.install_starting = false;
+                    self.install_waiting = false;
+                    self.update_error = Some(error);
+                }
+            },
+            Message::CheckUpdates => {
+                if !self.update_checking
+                    && self.download_progress.is_none()
+                    && !self.install_waiting
+                    && !self.install_starting
+                    && self.update_attempt.elapsed() >= Duration::from_secs(60)
+                {
+                    self.prepared_update = None;
+                    self.update_error = None;
+                    self.update_dismissed = false;
                     self.update_checking = true;
                     self.update_attempt = std::time::Instant::now();
                     return Task::perform(updates::check(true), Message::UpdatesChecked);
@@ -580,15 +824,6 @@ impl App {
             Message::UpdatesChecked(result) => {
                 self.update_checking = false;
                 self.update_result = Some(result);
-            }
-            Message::OpenUpdate => {
-                if let Some(Ok(Some(update))) = &self.update_result
-                    && let Err(e) = open_site(&update.page_url)
-                {
-                    self.notice_run = None;
-                    self.notice = e;
-                    self.error = true;
-                }
             }
             Message::Language(language) => {
                 if i18n::save(language).is_err() {
@@ -748,7 +983,10 @@ impl App {
             }
             Message::Tick => {
                 let poll = self.poll();
-                if !self.update_checking && self.update_attempt.elapsed() >= updates::CHECK_INTERVAL
+                if !self.update_checking
+                    && self.download_progress.is_none()
+                    && self.prepared_update.is_none()
+                    && self.update_attempt.elapsed() >= updates::CHECK_INTERVAL
                 {
                     self.update_checking = true;
                     self.update_attempt = std::time::Instant::now();
@@ -766,6 +1004,9 @@ impl App {
                         self.state = state;
                         self.connected = true;
                         self.update_run_notice();
+                        if self.install_waiting {
+                            return self.start_update();
+                        }
                     }
                     _ => {
                         self.connected = false;
@@ -777,6 +1018,15 @@ impl App {
                 self.wizard = None;
                 self.delete_plan = None;
                 self.delete_acknowledged = false;
+            }
+            Message::TogglePlanDetails(id) => {
+                self.expanded_plan = if self.expanded_plan.as_ref() == Some(&id) {
+                    None
+                } else if self.state.plans.iter().any(|p| p.id == id) {
+                    Some(id)
+                } else {
+                    self.expanded_plan.take()
+                };
             }
             Message::Reply(result) => {
                 self.busy = false;
@@ -1258,7 +1508,42 @@ impl App {
         Task::none()
     }
     fn available(&self) -> bool {
-        self.compatible() && !self.busy && self.state.active.is_none() && self.pending_run.is_none()
+        self.compatible()
+            && !self.busy
+            && !self.install_waiting
+            && !self.install_starting
+            && self.state.active.is_none()
+            && self.pending_run.is_none()
+    }
+    fn start_update(&mut self) -> Task<Message> {
+        if !self.install_waiting
+            || self.install_starting
+            || self.busy
+            || self.state.active.is_some()
+            || self.pending_run.is_some()
+            || self.wizard.is_some()
+        {
+            return Task::none();
+        }
+        if self.connected && !self.compatible() {
+            self.install_waiting = false;
+            self.update_error =
+                Some("Agent version mismatch. Restart the matching agent first.".into());
+            return Task::none();
+        }
+        if let Some(prepared) = self.prepared_update.clone() {
+            self.install_starting = true;
+            self.update_error = None;
+            return Task::perform(
+                async move {
+                    straja::updater::launch(prepared)
+                        .await
+                        .map_err(|e| format!("{e:#}"))
+                },
+                Message::UpdaterLaunched,
+            );
+        }
+        Task::none()
     }
     fn compatible(&self) -> bool {
         self.connected && self.state.agent_version == env!("CARGO_PKG_VERSION")
@@ -1369,7 +1654,10 @@ impl App {
             .spacing(15)
         ]
         .spacing(23);
-        if self.page != Page::About && matches!(self.update_result, Some(Ok(Some(_)))) {
+        if self.page != Page::About
+            && !self.update_dismissed
+            && matches!(self.update_result, Some(Ok(Some(_))))
+        {
             body = body.push(self.update_card(false));
         }
         if !self.connected {
@@ -1449,7 +1737,9 @@ impl App {
         body = body.push(content);
         row![
             sidebar,
-            scrollable(container(body).padding(30).width(Fill)).width(Fill)
+            scrollable(container(body).padding(30).width(Fill))
+                .id("main-content")
+                .width(Fill)
         ]
         .height(Fill)
         .into()
@@ -1508,6 +1798,45 @@ impl App {
         }
         content.into()
     }
+    fn plan_status(&self, p: &Plan) -> (String, Option<chrono::DateTime<chrono::Utc>>, Color) {
+        if let Some(active) = self.state.active.as_ref().filter(|a| a.plan_id == p.id) {
+            return (
+                format!("{} · {}", tr(&active.operation), tr("În curs")),
+                None,
+                BLUE,
+            );
+        }
+        if let Some(pending) = self.pending_run.as_ref().filter(|r| r.plan_id == p.id) {
+            return (
+                format!("{} · {}", tr(&pending.operation), tr("Se pregătește…")),
+                Some(pending.started),
+                BLUE,
+            );
+        }
+        if let Some(run) = self
+            .state
+            .history
+            .iter()
+            .find(|r| r.plan_id == p.id && r.operation == "Backup")
+        {
+            let color = match run.outcome.as_str() {
+                "Eroare" | "Incomplet" | "Întrerupt" => Color::from_rgb(0.78, 0.22, 0.25),
+                "Reușit cu avertisment" => Color::from_rgb(0.65, 0.40, 0.05),
+                "Reușit" => Color::from_rgb(0.12, 0.55, 0.40),
+                _ => INK,
+            };
+            return (
+                tr(&run.outcome),
+                Some(run.finished.unwrap_or(run.started)),
+                color,
+            );
+        }
+        if let Some(at) = p.last_success {
+            (tr("Reușit"), Some(at), Color::from_rgb(0.12, 0.55, 0.40))
+        } else {
+            (tr("Nerulat"), None, MUTED)
+        }
+    }
     fn plan_card<'a>(&'a self, p: &'a Plan) -> Element<'a, Message> {
         let due = if !p.enabled {
             "Programare oprită".into()
@@ -1528,126 +1857,217 @@ impl App {
                     .to_string()
             })
             .unwrap_or("Niciun backup complet încă".into());
-        let mut sources = column![text("SURSE INCLUSE").size(11).color(MUTED)].spacing(6);
-        for path in &p.sources {
-            sources = sources.push(raw_text(path.display().to_string()).size(14));
-        }
-        sources = sources.push(
-            text("Folderele includ toate subfolderele și fișierele, cu excluderile de mai jos.")
-                .size(12)
-                .color(MUTED),
-        );
-        sources = sources.push(
-            text(format!(
-                "Reguli de excludere: {}",
-                if p.excludes.is_empty() {
-                    tr("niciuna")
-                } else {
-                    p.excludes.join("; ")
-                }
-            ))
-            .size(13)
-            .color(MUTED),
-        );
-        for path in &p.excluded_paths {
-            sources = sources.push(
-                text(format!("Exclus: {}", path.display()))
-                    .size(13)
-                    .color(MUTED),
-            );
-        }
         let latest = self
             .state
             .history
             .iter()
             .find(|r| r.plan_id == p.id && r.operation == "Backup");
+        let expanded = self.expanded_plan.as_ref() == Some(&p.id);
+        let (status, status_time, status_color) = self.plan_status(p);
+        let mut status_cell = column![
+            text("ULTIMA STARE").size(11).color(MUTED),
+            raw_text(status).size(14).color(status_color),
+        ]
+        .spacing(4)
+        .width(Fill);
+        if let Some(at) = status_time {
+            status_cell = status_cell.push(
+                raw_text(
+                    at.with_timezone(&Local)
+                        .format("%Y-%m-%d · %H:%M")
+                        .to_string(),
+                )
+                .size(12)
+                .color(MUTED),
+            );
+        }
+        let source = p
+            .sources
+            .first()
+            .map(|path| path.display().to_string())
+            .unwrap_or_default();
+        let mut source_cell = column![
+            text("SURSE INCLUSE").size(11).color(MUTED),
+            compact_path(source),
+        ]
+        .spacing(4)
+        .width(Fill);
+        if p.sources.len() > 1 {
+            source_cell = source_cell.push(
+                text(format!("Surse suplimentare: {}", p.sources.len() - 1))
+                    .size(12)
+                    .color(MUTED),
+            );
+        }
         let mut body = column![
+            raw_text(&p.name).size(21),
             row![
-                raw_text(&p.name).size(21).width(Fill),
-                text(p.schedule.label()).size(13).color(MUTED)
-            ],
-            sources,
-            text(format!("MOD: {}", p.mode)).size(14).color(BLUE),
-            text(retention_label(p.keep_last)).size(14).color(MUTED),
-            text(format!("DESTINAȚIE: {}", p.repository.display())).size(14),
+                source_cell,
+                column![
+                    text("DESTINAȚIE").size(11).color(MUTED),
+                    compact_path(p.repository.display().to_string())
+                ]
+                .spacing(4)
+                .width(Fill),
+            ]
+            .spacing(20),
             row![
                 column![
-                    text("ULTIMA REUȘITĂ").size(11).color(MUTED),
-                    text(last).size(14)
+                    text("FRECVENȚĂ").size(11).color(MUTED),
+                    text(p.schedule.label()).size(14)
                 ]
-                .spacing(5)
+                .spacing(4)
                 .width(Fill),
+                status_cell,
                 column![
                     text("URMĂTORUL BACKUP").size(11).color(MUTED),
                     text(due).size(14)
                 ]
-                .spacing(5)
-                .width(Fill)
-            ],
-        ]
-        .spacing(16);
-        if let Some(run) = latest {
-            body = body.push(
-                column![
-                    text(format!(
-                        "ULTIMA ÎNCERCARE · {} · {}",
-                        run.started
-                            .with_timezone(&Local)
-                            .format("%Y-%m-%d %H:%M:%S"),
-                        run.outcome
-                    ))
-                    .size(13)
-                    .color(
-                        if matches!(
-                            run.outcome.as_str(),
-                            "Eroare" | "Incomplet" | "Întrerupt" | "Reușit cu avertisment"
-                        ) {
-                            Color::from_rgb(0.78, 0.22, 0.25)
-                        } else {
-                            INK
-                        }
-                    ),
-                    text(&run.detail).size(14),
-                    self.error_actions(run)
-                ]
-                .spacing(6),
-            );
-        }
-        body = body.push(
+                .spacing(4)
+                .width(Fill),
+            ]
+            .spacing(20),
+            text(format!(
+                "Excluderi: {} căi · {} reguli",
+                p.excluded_paths.len(),
+                p.excludes.len()
+            ))
+            .size(12)
+            .color(MUTED),
             row![
+                button(text("Backup acum"))
+                    .padding([8, 12])
+                    .on_press_maybe(self.available().then(|| Message::Backup(p.id.clone()))),
                 button(text("Editează"))
                     .style(button::secondary)
-                    .padding([10, 15])
+                    .padding([8, 12])
                     .on_press_maybe(self.available().then(|| Message::Edit(p.id.clone()))),
-                button(text("Backup acum"))
-                    .padding([10, 15])
-                    .on_press_maybe(self.available().then(|| Message::Backup(p.id.clone()))),
                 button(text("Restaurează"))
                     .style(button::secondary)
-                    .padding([10, 15])
+                    .padding([8, 12])
                     .on_press_maybe(
                         self.available()
                             .then(|| Message::LoadSnapshots(p.id.clone()))
                     ),
-                button(text("Verifică"))
-                    .style(button::text)
-                    .on_press_maybe(self.available().then(|| Message::Check(p.id.clone()))),
-                button(text(if p.enabled {
-                    "Oprește programarea"
+                button(text(if expanded {
+                    "Ascunde detaliile"
                 } else {
-                    "Activează programarea"
+                    "Detalii și acțiuni"
                 }))
                 .style(button::text)
-                .on_press_maybe(self.available().then(|| Message::Toggle(p.id.clone())))
+                .padding([8, 12])
+                .on_press(Message::TogglePlanDetails(p.id.clone())),
             ]
-            .spacing(8),
-        );
-        if p.mode != BackupMode::Encrypted {
-            body = body.push(
-                button(text("Deschide copiile în Explorer"))
-                    .style(button::text)
-                    .on_press(Message::OpenFolder(p.repository.clone())),
+            .spacing(8)
+            .wrap(),
+        ]
+        .spacing(12);
+        // Do not construct the potentially large lists on every redraw of a collapsed card.
+        if expanded {
+            let mut sources = column![text("SURSE INCLUSE").size(11).color(MUTED)]
+                .spacing(6)
+                .width(Fill);
+            for path in &p.sources {
+                sources = sources.push(raw_text(path.display().to_string()).size(14));
+            }
+            sources = sources.push(
+                text(
+                    "Folderele includ toate subfolderele și fișierele, cu excluderile de mai jos.",
+                )
+                .size(12)
+                .color(MUTED),
             );
+            sources = sources.push(
+                text(format!(
+                    "Reguli de excludere: {}",
+                    if p.excludes.is_empty() {
+                        tr("niciuna")
+                    } else {
+                        p.excludes.join("; ")
+                    }
+                ))
+                .size(13)
+                .color(MUTED),
+            );
+            for path in &p.excluded_paths {
+                sources = sources.push(
+                    text(format!("Exclus: {}", path.display()))
+                        .size(13)
+                        .color(MUTED),
+                );
+            }
+            body = body
+                .push(horizontal_rule(1))
+                .push(text(format!("MOD: {}", p.mode)).size(14).color(BLUE))
+                .push(text(retention_label(p.keep_last)).size(13).color(MUTED))
+                .push(text(format!("DESTINAȚIE: {}", p.repository.display())).size(14))
+                .push(
+                    container(
+                        scrollable(sources)
+                            .id(format!("plan-details-{}", p.id))
+                            .width(Fill)
+                            .height(Length::Shrink),
+                    )
+                    .width(Fill)
+                    .max_height(220),
+                )
+                .push(
+                    column![
+                        text("ULTIMA REUȘITĂ").size(11).color(MUTED),
+                        text(last).size(14)
+                    ]
+                    .spacing(4),
+                );
+            if let Some(run) = latest {
+                body = body.push(
+                    column![
+                        text(format!(
+                            "ULTIMA ÎNCERCARE · {} · {}",
+                            run.started
+                                .with_timezone(&Local)
+                                .format("%Y-%m-%d %H:%M:%S"),
+                            run.outcome
+                        ))
+                        .size(13)
+                        .color(
+                            if matches!(
+                                run.outcome.as_str(),
+                                "Eroare" | "Incomplet" | "Întrerupt" | "Reușit cu avertisment"
+                            ) {
+                                Color::from_rgb(0.78, 0.22, 0.25)
+                            } else {
+                                INK
+                            }
+                        ),
+                        text(&run.detail).size(14),
+                        self.error_actions(run)
+                    ]
+                    .spacing(6),
+                );
+            }
+            body = body.push(
+                row![
+                    button(text("Verifică"))
+                        .style(button::text)
+                        .on_press_maybe(self.available().then(|| Message::Check(p.id.clone()))),
+                    button(text(if p.enabled {
+                        "Oprește programarea"
+                    } else {
+                        "Activează programarea"
+                    }))
+                    .style(button::text)
+                    .on_press_maybe(self.available().then(|| Message::Toggle(p.id.clone())))
+                ]
+                .spacing(8)
+                .wrap(),
+            );
+            if p.mode != BackupMode::Encrypted {
+                body = body.push(
+                    button(text("Deschide copiile în Explorer"))
+                        .style(button::text)
+                        .on_press(Message::OpenFolder(p.repository.clone())),
+                );
+            }
         }
         if self.delete_plan.as_ref() == Some(&p.id) {
             let mut confirmation = column![
@@ -1687,7 +2107,7 @@ impl App {
                 .spacing(12),
             );
             body = body.push(confirmation);
-        } else {
+        } else if expanded {
             body = body.push(
                 button(text("Șterge planul…"))
                     .style(button::danger)
@@ -1823,16 +2243,65 @@ impl App {
             }
         };
         let mut content = column![text(status).size(18)].spacing(12);
-        if let Some(Ok(Some(update))) = &self.update_result {
+        if let Some(error) = &self.update_error {
             content = content
-                .push(button(text("Vezi versiunea și descarcă")).on_press(Message::OpenUpdate));
-            content = content.push(text("Înainte de instalare, așteaptă terminarea operațiilor, apoi închide aplicația, agentul și iconița din tray.").size(13));
+                .push(
+                    text("Actualizarea nu a reușit. Poți încerca din nou.")
+                        .color(Color::from_rgb(0.78, 0.22, 0.25)),
+                )
+                .push(raw_text(error).size(12));
+        }
+        if let Some(Ok(Some(update))) = &self.update_result {
+            if self.install_starting {
+                content =
+                    content.push(text("Se pregătește închiderea și instalarea actualizării…"));
+            } else if self.install_waiting {
+                content = content
+                    .push(text(
+                        "Actualizarea va porni după terminarea operației curente.",
+                    ))
+                    .push(button(text("Mai târziu")).on_press(Message::LaterUpdate));
+            } else if self.install_confirmation {
+                content = content.push(text("Straja se va închide, va instala actualizarea în același folder și se va redeschide. Planurile și copiile de backup se păstrează. Windows poate cere aprobarea de administrator."))
+                    .push(row![button(text(if self.state.active.is_some() || self.busy || self.pending_run.is_some() { "Instalează după operația curentă" } else { "Confirmă închiderea și instalarea" })).on_press(Message::ConfirmInstallUpdate), button(text("Mai târziu")).on_press(Message::LaterUpdate)].spacing(10));
+            } else if let Some(progress) = &self.download_progress {
+                let received = progress.received.load(std::sync::atomic::Ordering::Relaxed);
+                let total = update.installer.as_ref().map_or(1, |a| a.size).max(1);
+                content = content
+                    .push(text(format!(
+                        "Se descarcă actualizarea: {}%",
+                        received * 100 / total
+                    )))
+                    .push(progress_bar(0.0..=1.0, received as f32 / total as f32))
+                    .push(button(text("Anulează descărcarea")).on_press(Message::CancelDownload));
+            } else if self.prepared_update.is_some() {
+                content = content
+                    .push(text("Actualizarea a fost descărcată și verificată."))
+                    .push(button(text("Închide și instalează")).on_press_maybe(
+                        self.wizard.is_none().then_some(Message::AskInstallUpdate),
+                    ));
+                if self.wizard.is_some() {
+                    content = content.push(text(
+                        "Salvează sau închide formularul înainte de actualizare.",
+                    ));
+                }
+            } else if update.installer.is_some() {
+                content = content.push(
+                    row![
+                        button(text("Descarcă actualizarea")).on_press(Message::DownloadUpdate),
+                        button(text("Mai târziu")).on_press(Message::LaterUpdate)
+                    ]
+                    .spacing(10),
+                );
+            } else {
+                content = content.push(text("Această versiune nu are încă un instalator verificabil pentru actualizare automată."));
+            }
             if details && !update.notes.is_empty() {
                 content = content.push(scrollable(raw_text(&update.notes).size(14)).height(180));
             }
         }
         if details {
-            content = content.push(text("Verificare automată la pornirea interfeței și la fiecare 24 de ore. Actualizările se instalează manual.").size(13));
+            content = content.push(text("Verificare automată la pornire și la fiecare 24 de ore. Descarcă și instalează direct din aplicație, când alegi tu.").size(13));
             content = content.push(
                 raw_text(format!(
                     "GitHub: {} · v{}",
@@ -1845,6 +2314,9 @@ impl App {
             content = content.push(
                 button(text("Verifică actualizările")).on_press_maybe(
                     (!self.update_checking
+                        && self.download_progress.is_none()
+                        && !self.install_starting
+                        && !self.install_waiting
                         && self.update_attempt.elapsed() >= Duration::from_secs(60))
                     .then_some(Message::CheckUpdates),
                 ),
@@ -2176,6 +2648,32 @@ fn backup_error_path(run: &Run) -> Option<PathBuf> {
     (path.is_absolute() && !candidate.contains(['\0', '\r', '\n'])).then_some(path)
 }
 
+fn compact_path(path: String) -> Element<'static, Message> {
+    let chars: Vec<char> = path.chars().collect();
+    let label = if chars.len() > 48 {
+        format!(
+            "{}…{}",
+            chars[..24].iter().collect::<String>(),
+            chars[chars.len() - 23..].iter().collect::<String>()
+        )
+    } else {
+        path.clone()
+    };
+    tooltip(
+        raw_text(label)
+            .size(14)
+            .width(Fill)
+            .wrapping(iced::widget::text::Wrapping::None),
+        container(raw_text(path).size(14))
+            .max_width(600)
+            .padding(8)
+            .style(container::rounded_box),
+        tooltip::Position::Bottom,
+    )
+    .delay(Duration::from_millis(400))
+    .into()
+}
+
 fn card<'a>(body: impl Into<Element<'a, Message>>) -> Element<'a, Message> {
     container(body)
         .padding(22)
@@ -2213,6 +2711,130 @@ fn surface(_theme: &Theme) -> container::Style {
 mod tests {
     use super::*;
     #[test]
+    fn compact_plan_status_and_read_only_details_survive_refresh() {
+        let (mut app, _) = App::new();
+        let mut run = failed_backup(r"C:\Example\cache");
+        let mut plan = Plan {
+            id: run.plan_id.clone(),
+            name: "Example".into(),
+            mode: BackupMode::Plain,
+            sources: vec![PathBuf::from(r"C:\Example")],
+            repository: PathBuf::from(r"E:\Backups"),
+            excluded_paths: (0..1000)
+                .map(|n| PathBuf::from(format!(r"C:\Example\cache-{n}")))
+                .collect(),
+            excludes: vec!["*.tmp".into()],
+            keep_last: Some(7),
+            schedule: Schedule::Manual,
+            enabled: true,
+            next_due: None,
+            last_success: None,
+        };
+        assert_eq!(app.plan_status(&plan).0, tr("Nerulat"));
+        plan.last_success = Some(run.started - chrono::Duration::days(1));
+        assert_eq!(app.plan_status(&plan).0, tr("Reușit"));
+        app.state.history.push(run.clone());
+        assert_eq!(
+            app.plan_status(&plan).0,
+            tr("Eroare"),
+            "a later failure must not be hidden by an older success"
+        );
+        assert_eq!(app.plan_status(&plan).1, run.finished);
+        run.operation = "Verificare".into();
+        run.outcome = "Reușit".into();
+        app.state.history.insert(0, run.clone());
+        assert_eq!(
+            app.plan_status(&plan).0,
+            tr("Eroare"),
+            "verification does not replace the backup outcome"
+        );
+        app.pending_run = Some(run);
+        assert!(app.plan_status(&plan).0.contains(&tr("Se pregătește…")));
+        app.state.active = Some(Progress {
+            plan_id: plan.id.clone(),
+            operation: "Backup".into(),
+            ..Progress::default()
+        });
+        assert_eq!(
+            app.plan_status(&plan).0,
+            format!("{} · {}", tr("Backup"), tr("În curs"))
+        );
+        app.pending_run = None;
+        app.state.plans.push(plan.clone());
+        let state_before = serde_json::to_value(&app.state).unwrap();
+        let _ = app.update(Message::TogglePlanDetails(plan.id.clone()));
+        assert_eq!(
+            app.expanded_plan.as_ref(),
+            Some(&plan.id),
+            "details remain readable during an operation"
+        );
+        let _ = app.update(Message::Refresh(Ok(Response::State(app.state.clone()))));
+        assert_eq!(app.expanded_plan.as_ref(), Some(&plan.id));
+        assert_eq!(serde_json::to_value(&app.state).unwrap(), state_before);
+        let _ = app.update(Message::TogglePlanDetails(plan.id.clone()));
+        assert!(app.expanded_plan.is_none());
+    }
+
+    #[test]
+    fn update_install_requires_confirmation_and_waits_for_operations() {
+        let (mut app, _) = App::new();
+        app.connected = true;
+        app.state.agent_version = env!("CARGO_PKG_VERSION").into();
+        app.prepared_update = Some(updates::PreparedUpdate {
+            path: PathBuf::from("test-only-installer.exe"),
+            update: Update {
+                version: "1.0.0".into(),
+                notes: String::new(),
+                page_url: String::new(),
+                installer: None,
+            },
+        });
+        let _ = app.update(Message::ConfirmInstallUpdate);
+        assert!(!app.install_starting && !app.install_waiting);
+        app.wizard = Some(Wizard::default());
+        let _ = app.update(Message::AskInstallUpdate);
+        assert!(!app.install_confirmation);
+        assert!(app.wizard.is_some());
+        app.wizard = None;
+        app.state.active = Some(Progress::default());
+        let _ = app.update(Message::AskInstallUpdate);
+        assert!(app.install_confirmation);
+        let _ = app.update(Message::ConfirmInstallUpdate);
+        assert!(app.install_waiting && !app.install_starting);
+        assert!(!app.available());
+        let _ = app.update(Message::LaterUpdate);
+        assert!(!app.install_waiting);
+        let _ = app.update(Message::AskInstallUpdate);
+        let _ = app.update(Message::ConfirmInstallUpdate);
+        app.state.active = None;
+        let _ = app.start_update(); // Dropped Task: no subprocess or IPC in this test.
+        assert!(app.install_starting);
+        let _ = app.update(Message::New);
+        assert!(
+            app.wizard.is_none(),
+            "handoff must not discard a newly opened form"
+        );
+        let _ = app.update(Message::UpdaterLaunched(Err("helper failed".into())));
+        assert!(!app.install_waiting && !app.install_starting);
+        assert_eq!(app.update_error.as_deref(), Some("helper failed"));
+        assert!(
+            app.prepared_update.is_some(),
+            "failed handoff can be retried"
+        );
+    }
+    #[test]
+    fn idle_polling_slows_down_but_operations_stay_responsive() {
+        let (mut app, _) = App::new();
+        assert_eq!(app.poll_interval(), Duration::from_secs(5));
+        app.connected = true;
+        assert_eq!(app.poll_interval(), Duration::from_secs(10));
+        app.state.active = Some(Progress::default());
+        assert_eq!(app.poll_interval(), Duration::from_secs(2));
+        app.state.active = None;
+        app.busy = true;
+        assert_eq!(app.poll_interval(), Duration::from_secs(2));
+    }
+    #[test]
     fn update_notifications_preserve_backup_state_and_form() {
         let (mut app, _) = App::new();
         app.busy = true;
@@ -2221,6 +2843,7 @@ mod tests {
         app.wizard.as_mut().unwrap().name = "Unsaved plan".into();
         let _ = app.update(Message::UpdatesChecked(Ok(Some(Update {
             version: "1.0.0".into(),
+            installer: None,
             notes: "Changes".into(),
             page_url: "https://github.com/weblikero/straja-backup/releases/tag/v1.0.0".into(),
         }))));

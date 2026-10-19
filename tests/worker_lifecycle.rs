@@ -15,6 +15,85 @@ async fn request(name: &str, request: Request) -> Result<Response> {
 }
 
 #[tokio::test]
+#[ignore = "Uses an isolated Windows pipe and database; run scripts/test.ps1"]
+async fn update_handoff_drains_service_and_preserves_plans() -> Result<()> {
+    let tmp = tempfile::tempdir()?;
+    let root = tmp.path().join("app");
+    let source = tmp.path().join("source");
+    let destination = tmp.path().join("backups");
+    std::fs::create_dir(&source)?;
+    std::fs::create_dir(&destination)?;
+    std::fs::write(source.join("canary.txt"), b"keep source")?;
+    let store = Store::open(&root)?;
+    let mut plan = store.add(NewPlan {
+        mode: BackupMode::Plain,
+        name: "Update test".into(),
+        sources: vec![source.clone()],
+        repository: destination.clone(),
+        excluded_paths: vec![],
+        excludes: vec![],
+        keep_last: None,
+        schedule: Schedule::Manual,
+        password: String::new(),
+    })?;
+    let pipe = format!(r"\\.\pipe\StrajaTest-{}", uuid::Uuid::new_v4());
+    let (_stop, rx) = tokio::sync::watch::channel(false);
+    let task = tokio::spawn(worker::run_on_pipe(
+        root.clone(),
+        PathBuf::new(),
+        true,
+        rx,
+        pipe.clone(),
+    ));
+    tokio::time::timeout(StdDuration::from_secs(10), async {
+        while request(&pipe, Request::State).await.is_err() {
+            tokio::time::sleep(StdDuration::from_millis(50)).await;
+        }
+    })
+    .await?;
+    let token = uuid::Uuid::new_v4().to_string();
+    assert!(matches!(
+        request(&pipe, Request::PrepareUpdate(token.clone())).await?,
+        Response::UpdateReady {
+            service_mode: true,
+            ..
+        }
+    ));
+    // A due schedule appearing during handoff must remain suspended through a scheduler tick.
+    plan.next_due = Some(Utc::now() - Duration::hours(1));
+    rusqlite::Connection::open(root.join("straja.sqlite"))?.execute(
+        "UPDATE plans SET json=?1 WHERE id=?2",
+        rusqlite::params![serde_json::to_string(&plan)?, plan.id],
+    )?;
+    assert!(matches!(
+        request(&pipe, Request::Backup(plan.id.clone())).await?,
+        Response::Error(_)
+    ));
+    assert!(matches!(
+        request(
+            &pipe,
+            Request::ShutdownForUpdate(uuid::Uuid::new_v4().to_string())
+        )
+        .await?,
+        Response::Error(_)
+    ));
+    tokio::time::sleep(StdDuration::from_secs(16)).await;
+    let Response::State(state) = request(&pipe, Request::State).await? else {
+        panic!("Expected state")
+    };
+    assert!(state.active.is_none() && state.history.is_empty());
+    assert!(matches!(
+        request(&pipe, Request::ShutdownForUpdate(token)).await?,
+        Response::Ok(_)
+    ));
+    tokio::time::timeout(StdDuration::from_secs(5), task).await???;
+    assert_eq!(Store::open(&root)?.plans()?.len(), 1);
+    assert_eq!(std::fs::read(source.join("canary.txt"))?, b"keep source");
+    assert_eq!(std::fs::read_dir(destination)?.count(), 0);
+    Ok(())
+}
+
+#[tokio::test]
 #[ignore = "Starts an isolated Windows named-pipe worker with real Restic"]
 async fn missed_schedule_runs_without_gui_and_survives_restart() -> Result<()> {
     scheduled_and_manual_roundtrip(BackupMode::Encrypted).await

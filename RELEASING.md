@@ -9,23 +9,27 @@ Starting with 0.4.1, the desktop interface checks the public GitHub Releases API
 
 Only the repository's latest published stable release is considered. Drafts, prereleases, older versions and releases without a correctly named Windows x64 asset are ignored or reported as invalid. Versions are compared numerically using SemVer. Successful checks with no published stable release show that no newer stable release is available. Offline/API errors appear in About without affecting backups.
 
-A notification offers **View release and download**, opening the release page in the default browser. Release notes appear in About as plain text, in the publisher's language. No installer is downloaded or run by the application. The tray and Windows service do not independently check updates; open the interface to see notifications. Older installed versions (0.4.0 and earlier) need one manual upgrade to gain this feature.
+From 0.5.0, a notification offers **Download update**, then **Close and install** with a confirmation or an option to wait for the current backup/restore/verification. The GUI streams the installer to a unique per-user update folder, checks its size and GitHub SHA-256 digest, and hands off to a copy of itself outside the installation directory. The helper revalidates the published asset, waits for the GUI to exit, requests a token-protected idle-agent/service shutdown, closes the matching tray, and waits for executables to be released. The installer keeps the existing path, per-user/all-users scope, language and previously selected tasks. No forced termination or automatic reboot is requested. Straja reopens after completion; UAC approval may be required. A failed handoff keeps the GUI open; later failures are reported and reopening is attempted.
+
+In-app installation requires `StrajaBackup-X.Y.Z-windows-x64-setup.exe`, an uploaded asset of 1–256 MiB, and a GitHub `digest` of `sha256:<64 hex digits>`. The digest is obtained from the public release API over HTTPS, not from an adjacent checksum file or release notes. Redirects are restricted to GitHub and its release asset hosts. A portable-only release can be discovered but cannot be installed automatically. SHA-256 validates integrity; the binaries are not yet code-signed.
+
+The tray and service do not independently check for updates; open the interface to see notifications. Installed versions up to 0.4.2 need one manual upgrade to gain in-app installation. Release notes appear in About as plain text in the publisher's language. Installer/runtime failure recovery and service/UAC flows must be validated on disposable Windows installations before public distribution.
 
 ## Prepare a version
 
 1. Update the package version in `Cargo.toml`, regenerate `Cargo.lock`, and update the guides and installer test default. Keep GUI and agent versions identical.
 2. Run `scripts/test.ps1`, Clippy and formatting checks. Build with `scripts/package.ps1`. Test the actual installer lifecycle on a disposable Windows account before distributing an installer.
 3. Package the entire `dist/StrajaBackup` folder as `dist/StrajaBackup-X.Y.Z-windows-x64-portable.zip`. Include notices and dependency licenses. Generate a SHA-256 sidecar using the same filename plus `.sha256`.
-4. Optionally build `dist/installer/StrajaBackup-X.Y.Z-windows-x64-setup.exe` and its SHA-256 sidecar using `scripts/build-installer.ps1 -SkipBuild`. Do not upload the test installer.
+4. Build `dist/installer/StrajaBackup-X.Y.Z-windows-x64-setup.exe` and its SHA-256 sidecar using `scripts/build-installer.ps1 -SkipBuild`. Do not upload the test installer.
 5. Commit the reviewed sources, tag the commit `vX.Y.Z`, and push the branch and tag. Exclude local toolchains, build output, logs, databases, keys and personal data.
 6. Write release notes describing changes, validation and limitations, then run:
 
 ```powershell
 .\scripts\prepare-release.ps1 -NotesFile .\release-notes.txt
-# Add -IncludeInstaller only after validating the installer.
+# Only for a deliberately portable-only preview: add -PortableOnly (no in-app installation).
 ```
 
-This creates a **draft** with checksum-verified assets. Review the draft and publish it as a stable release, marking it **Latest** in GitHub. Publishing, rather than merely uploading a file to the website, makes it discoverable by installed clients. Use a prerelease for builds that should not be offered through the stable channel. Never replace assets under an existing published tag; issue a new version.
+This creates a **draft** with checksum-verified portable and installer assets and checks the uploaded installer digest returned by GitHub. Review the draft and publish it as a stable release, marking it **Latest** in GitHub. Publishing, rather than merely uploading a file to the website, makes it discoverable by installed clients. Use a prerelease for builds that should not be offered through the stable channel. Never replace assets under an existing published tag; issue a new version.
 
 The draft helper validates tag/HEAD, a clean working tree and asset hashes. Build provenance, functional installer validation and signing remain release responsibilities; checksums alone do not prove publisher identity. Code signing is not configured yet.
 
@@ -35,6 +39,6 @@ The Straja product page can link to https://github.com/weblikero/straja-backup/r
 
 GitHub API reference: https://docs.github.com/en/rest/releases/releases#get-the-latest-release.
 
-## Current release limitation
+## Current validation status
 
-The 0.4.0 installer lifecycle stalled locally, including a minimal Inno installer unrelated to Straja. The cause is unresolved. Do not treat installer compilation as a successful install/upgrade/uninstall test for 0.4.1. Keep releases as drafts until the intended distribution artifacts have been reviewed and tested. See `VALIDATION.md`.
+The earlier Inno runtime stall did not recur in the 0.5.0 isolated lifecycle tests. Installation, upgrade, uninstall, registration, locked-file protection and data preservation passed. A second run exercised the in-app installer arguments and read-sharing lock and confirmed preservation of the installation path and agent/tray startup tasks. The full GitHub download/helper/restart path, all-users elevation and an actual installed SCM service restart have not yet been exercised end to end. Keep publication gated on those disposable-machine checks and review of the actual release artifacts. See `VALIDATION.md`.

@@ -1,4 +1,4 @@
-﻿param([string]$Version = '0.4.1', [ValidateSet('english','german','spanish','portuguese','french','italian','romanian')][string]$Language = 'english')
+﻿param([string]$Version = '0.5.3', [ValidateSet('english','german','spanish','portuguese','french','italian','romanian')][string]$Language = 'english')
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
 $setup = Join-Path $projectRoot "dist\installer\StrajaBackup-$Version-windows-x64-test-setup.exe"
@@ -82,6 +82,17 @@ try {
         Assert-Test ((Invoke-TestProcess $uninstaller @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') 'locked-uninstall') -ne 0) 'Dezinstalarea nu a refuzat fișierul în uz.'
         Assert-Test ($null -ne (Read-UninstallEntry)) 'Dezinstalarea blocată a eliminat înregistrarea.'
     } finally { $lockedFile.Dispose() }
+
+    # Match the in-app updater's arguments and read-sharing lock on the installer.
+    $inAppArgs = @('/SP-','/SILENT','/SUPPRESSMSGBOXES','/NORESTART','/NOCLOSEAPPLICATIONS','/NORESTARTAPPLICATIONS','/RESTARTEXITCODE=3010','/CURRENTUSER',('/LANG=' + $Language),('/DIR="' + $appDir + '"'))
+    $installerReadLock = [IO.File]::Open($setup, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    try {
+        Assert-Test ((Invoke-TestProcess $setup $inAppArgs 'in-app-upgrade') -eq 0) 'The in-app installer invocation failed.'
+    } finally { $installerReadLock.Dispose() }
+    Assert-Test ((Read-UninstallEntry).InstallLocation.TrimEnd('\') -eq $appDir) 'The update changed the installation folder.'
+    Assert-Test ((Read-StartupEntry) -eq ('"' + (Join-Path $appDir 'straja-agent.exe') + '"')) 'The update did not preserve agent startup.'
+    Assert-Test ((Read-StartupEntry ($runName + 'Tray')) -eq ('"' + (Join-Path $appDir 'straja-agent.exe') + '" --tray')) 'The update did not preserve tray startup.'
+    Assert-Test ((Get-FileHash -LiteralPath $marker).Hash -eq $markerHash) 'The update changed the user canary.'
 
     Assert-Test ((Invoke-TestProcess $setup ($common + '/TASKS=""') 'upgrade') -eq 0) 'Actualizarea a eșuat.'
     Assert-Test ($null -ne (Read-UninstallEntry)) 'Actualizarea a pierdut înregistrarea.'

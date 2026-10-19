@@ -1,3 +1,7 @@
+> Actualizare 0.5.3: „Planurile mele” afișează carduri compacte cu sursa, destinația, frecvența, ultima stare și următoarea rulare. Excluderile, mesajele și acțiunile secundare sunt în „Detalii și acțiuni”.
+
+> Actualizare 0.5.0: aplicația poate descărca versiuni noi din GitHub și propune „Închide și instalează”, cu confirmare și așteptarea operațiilor active. Versiunile până la 0.4.2 necesită o primă instalare manuală pentru a primi această funcție. Ghidul principal actualizat este [README.md](README.md); limitele de validare sunt în [VALIDATION.md](VALIDATION.md). Textul de mai jos este ghidul românesc anterior.
+
 # Straja Backup — Windows, Rust și Restic
 
 Creată de **[Weblike PRO](https://weblike.ro/)** — un proiect **Open-Source**, sub licență MIT.

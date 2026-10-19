@@ -1,6 +1,7 @@
 //! Presentation-only localization. Persistent plans, run outcomes and paths remain unchanged.
 use serde::Deserialize;
 use std::{
+    collections::HashMap,
     path::Path,
     sync::{
         OnceLock,
@@ -102,6 +103,23 @@ fn catalog() -> &'static Vec<Entry> {
         rows
     })
 }
+
+fn exact_messages() -> &'static HashMap<&'static str, &'static Entry> {
+    static EXACT: OnceLock<HashMap<&'static str, &'static Entry>> = OnceLock::new();
+    EXACT.get_or_init(|| {
+        catalog()
+            .iter()
+            .filter(|e| e.parts.len() == 1)
+            .map(|entry| (entry.source.as_str(), entry))
+            .collect()
+    })
+}
+
+fn templates() -> &'static Vec<&'static Entry> {
+    static TEMPLATES: OnceLock<Vec<&'static Entry>> = OnceLock::new();
+    // Preserve specificity ordering for legacy messages and nested translations.
+    TEMPLATES.get_or_init(|| catalog().iter().filter(|e| e.parts.len() > 1).collect())
+}
 fn captures<'a>(parts: &[String], input: &'a str) -> Option<Vec<&'a str>> {
     let mut tail = input.strip_prefix(&parts[0])?;
     let mut values = Vec::new();
@@ -194,12 +212,10 @@ fn translate_depth(language: Language, input: &str, depth: usize) -> String {
             );
         }
     }
-    for entry in catalog() {
-        if entry.parts.len() == 1 && entry.source == input {
-            return entry.values[language as usize].clone();
-        }
+    if let Some(entry) = exact_messages().get(input) {
+        return entry.values[language as usize].clone();
     }
-    for entry in catalog().iter().filter(|e| e.parts.len() > 1) {
+    for entry in templates() {
         if let Some(args) = captures(&entry.parts, input) {
             let args: Vec<String> = args
                 .iter()

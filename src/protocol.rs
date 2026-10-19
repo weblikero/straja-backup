@@ -7,7 +7,11 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 #[derive(Clone, Serialize, Deserialize)]
 pub enum Request {
     State,
+    Status,
     Shutdown,
+    PrepareUpdate(String),
+    CancelUpdate(String),
+    ShutdownForUpdate(String),
     Add(NewPlan),
     Delete(String),
     Update {
@@ -26,7 +30,13 @@ pub enum Request {
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Response {
+    UpdateReady {
+        agent_executable: PathBuf,
+        data_dir: PathBuf,
+        service_mode: bool,
+    },
     State(State),
+    Status(AgentStatus),
     Snapshots(Vec<Snapshot>),
     Ok(String),
     Started(Run),

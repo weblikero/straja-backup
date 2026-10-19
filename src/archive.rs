@@ -53,16 +53,17 @@ pub(crate) async fn create(
     mode: BackupMode,
     folder: &Path,
     m: Manifest,
-) -> Result<()> {
+) -> Result<Manifest> {
     let (engine, folder) = (engine.clone(), folder.to_path_buf());
-    tokio::task::spawn_blocking(move || -> Result<()> {
+    tokio::task::spawn_blocking(move || -> Result<Manifest> {
         let target = folder.join(mode.archive_name().context("Format de arhivă lipsă")?);
         let output = OpenOptions::new()
             .write(true)
             .create_new(true)
             .open(&target)?;
-        let mut paths = vec![PathBuf::from(MANIFEST), PathBuf::from(FILES)];
-        paths.extend(m.entries.iter().map(|e| e.path.clone()));
+        let paths = [PathBuf::from(MANIFEST), PathBuf::from(FILES)]
+            .into_iter()
+            .chain(m.entries.iter().map(|e| e.path.clone()));
         match mode {
             BackupMode::Zip => {
                 let mut writer = zip::ZipWriter::new(output);
@@ -83,6 +84,7 @@ pub(crate) async fn create(
                     let options = zip::write::SimpleFileOptions::default()
                         .last_modified_time(timestamp)
                         .compression_method(zip::CompressionMethod::Deflated)
+                        .compression_level(Some(1))
                         .large_file(meta.len() >= u32::MAX as u64);
                     if meta.is_dir() {
                         writer.add_directory(name(&relative)?, options)?;
@@ -94,7 +96,7 @@ pub(crate) async fn create(
                 writer.finish()?.sync_all()?;
             }
             BackupMode::TarGz => {
-                let encoder = flate2::write::GzEncoder::new(output, flate2::Compression::default());
+                let encoder = flate2::write::GzEncoder::new(output, flate2::Compression::fast());
                 let mut writer = tar::Builder::new(encoder);
                 writer.follow_symlinks(false);
                 for relative in paths {
@@ -110,6 +112,9 @@ pub(crate) async fn create(
             }
             BackupMode::SevenZip => {
                 let mut writer = sevenz_rust2::ArchiveWriter::new(output)?;
+                writer.set_content_methods(vec![
+                    sevenz_rust2::encoder_options::Lzma2Options::from_level(1).into(),
+                ]);
                 for relative in paths {
                     engine.update(&format!("Comprim 7z: {}", relative.display()));
                     let path = safe_child(&folder, &relative)?;
@@ -125,7 +130,8 @@ pub(crate) async fn create(
             }
             _ => bail!("Format necomprimat."),
         }
-        verify_sync(&engine, mode, &folder, &m, None)
+        verify_sync(&engine, mode, &folder, &m, None)?;
+        Ok(m)
     })
     .await?
 }
@@ -164,6 +170,7 @@ fn verify_sync(
         .map(|e| Ok((name(&e.path)?, e)))
         .collect::<Result<_>>()?;
     let mut seen = HashSet::new();
+    let mut buffer = vec![0; 256 * 1024];
     // Never delegate extraction to an archive library: reject extras, links, duplicates and traversal.
     let mut consume =
         |raw_name: &str, directory: bool, size: u64, reader: &mut dyn Read| -> Result<()> {
@@ -225,7 +232,6 @@ fn verify_sync(
             };
             let mut hash = Sha256::new();
             let mut count = 0u64;
-            let mut buffer = vec![0; 1024 * 1024];
             let mut bounded = reader.take(size.checked_add(1).context("Dimensiune prea mare")?);
             loop {
                 let n = bounded.read(&mut buffer)?;

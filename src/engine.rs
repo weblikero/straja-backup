@@ -59,8 +59,7 @@ impl Engine {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true);
-        #[cfg(windows)]
-        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        crate::resources::restic_budget(&mut cmd);
         let mut child = cmd.spawn().context("Restic nu a putut porni")?;
         let mut input = child.stdin.take().context("Lipsește stdin")?;
         input.write_all(&secret).await?;

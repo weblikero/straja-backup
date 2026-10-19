@@ -1,6 +1,6 @@
 //! Interactive-session tray companion. It monitors the worker; it never owns backups.
 use crate::{
-    model::State,
+    model::AgentStatus,
     protocol::{self, Request, Response},
 };
 use anyhow::{Context, Result, bail};
@@ -27,7 +27,7 @@ const EXIT: usize = 4;
 
 #[derive(Clone, Default)]
 struct Monitor {
-    state: Option<State>,
+    state: Option<AgentStatus>,
     checked: bool,
     command_pending: bool,
     command_error: Option<String>,
@@ -66,7 +66,7 @@ impl Monitor {
                 "Straja · Agent vechi activ; repornește agentul pentru actualizare".into(),
             );
         }
-        if let Some(run) = state.history.iter().find(|r| r.finished.is_some())
+        if let Some(run) = &state.last_outcome
             && run.outcome != "Reușit"
         {
             return (
@@ -86,7 +86,7 @@ impl Monitor {
                 } else {
                     "Agent"
                 },
-                state.plans.len()
+                state.plan_count
             ),
         )
     }
@@ -206,6 +206,7 @@ struct Tray {
     monitor: Arc<Mutex<Monitor>>,
     smoke_deadline: Option<std::time::Instant>,
     ever_added: bool,
+    last_presentation: Option<(usize, String)>,
 }
 thread_local! { static TRAY: RefCell<Option<Tray>> = const { RefCell::new(None) }; }
 
@@ -227,9 +228,19 @@ impl Tray {
             .unwrap_or_else(|e| e.into_inner())
             .clone();
         let (index, label) = snapshot.presentation();
-        self.data.hIcon = self.icons[index];
         crate::i18n::reload();
-        copy_wide(&mut self.data.szTip, &crate::i18n::tr(&label));
+        let label = crate::i18n::tr(&label);
+        if self.added
+            && self
+                .last_presentation
+                .as_ref()
+                .is_some_and(|last| last.0 == index && last.1 == label)
+        {
+            return;
+        }
+        self.data.hIcon = self.icons[index];
+        copy_wide(&mut self.data.szTip, &label);
+        self.last_presentation = Some((index, label));
         // Explorer can start after us or restart. Retry registration until available.
         unsafe {
             if !self.added {
@@ -327,7 +338,7 @@ impl Tray {
                 drop(monitor);
                 let shared = self.monitor.clone();
                 std::thread::spawn(move || {
-                    let result = tokio::runtime::Runtime::new()
+                    let result = crate::resources::monitor_runtime()
                         .map_err(anyhow::Error::from)
                         .and_then(|rt| rt.block_on(protocol::call(Request::Shutdown)));
                     let mut monitor = shared.lock().unwrap_or_else(|e| e.into_inner());
@@ -501,20 +512,33 @@ fn run_inner(smoke: Option<Duration>) -> Result<()> {
     if smoke.is_none() {
         let shared = monitor.clone();
         std::thread::spawn(move || {
-            let Ok(runtime) = tokio::runtime::Runtime::new() else {
+            let Ok(runtime) = crate::resources::monitor_runtime() else {
                 return;
             };
             loop {
-                let state = match runtime.block_on(protocol::call(Request::State)) {
-                    Ok(Response::State(s)) => Some(s),
+                let state = match runtime.block_on(protocol::call(Request::Status)) {
+                    Ok(Response::Status(s)) => Some(s),
+                    // Older agents do not understand the compact request. Preserve the
+                    // version mismatch warning until the installed agent is restarted.
+                    Ok(Response::Error(_)) => {
+                        match runtime.block_on(protocol::call(Request::State)) {
+                            Ok(Response::State(s)) => Some(s.into()),
+                            _ => None,
+                        }
+                    }
                     _ => None,
+                };
+                let interval = if state.as_ref().is_some_and(|s| s.active.is_some()) {
+                    crate::resources::ACTIVE_POLL
+                } else {
+                    crate::resources::IDLE_TRAY_POLL
                 };
                 {
                     let mut m = shared.lock().unwrap_or_else(|e| e.into_inner());
                     m.state = state;
                     m.checked = true;
                 }
-                std::thread::sleep(Duration::from_secs(2));
+                std::thread::sleep(interval);
             }
         });
     }
@@ -595,6 +619,7 @@ fn run_inner(smoke: Option<Duration>) -> Result<()> {
                 monitor,
                 smoke_deadline: smoke.map(|d| std::time::Instant::now() + d),
                 ever_added: false,
+                last_presentation: None,
             });
             if let Some(tray) = slot.borrow_mut().as_mut() {
                 tray.refresh();
@@ -669,7 +694,7 @@ mod tests {
         };
         assert_eq!(m.presentation().0, 3);
         assert!(!m.can_stop());
-        m.state = Some(State {
+        m.state = Some(AgentStatus {
             agent_version: env!("CARGO_PKG_VERSION").into(),
             ..Default::default()
         });

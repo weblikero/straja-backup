@@ -19,6 +19,8 @@ impl Store {
         store.connect()?.execute_batch("PRAGMA journal_mode=WAL;
             CREATE TABLE IF NOT EXISTS plans(id TEXT PRIMARY KEY, json TEXT NOT NULL, secret BLOB NOT NULL);
             CREATE TABLE IF NOT EXISTS runs(id TEXT PRIMARY KEY, started TEXT NOT NULL, json TEXT NOT NULL);
+            CREATE INDEX IF NOT EXISTS runs_started ON runs(started DESC);
+            CREATE INDEX IF NOT EXISTS runs_finished_started ON runs(started DESC) WHERE json_extract(json, '$.finished') IS NOT NULL;
             PRAGMA user_version=1;")?;
         Ok(store)
     }
@@ -195,6 +197,16 @@ impl Store {
         q.query_map([], |r| r.get::<_, String>(0))?
             .map(|r| Ok(serde_json::from_str(&r?)?))
             .collect()
+    }
+    pub fn status_summary(&self) -> Result<(u64, Option<LastOutcome>)> {
+        use rusqlite::OptionalExtension;
+        let db = self.connect()?;
+        let count: i64 = db.query_row("SELECT COUNT(*) FROM plans", [], |r| r.get(0))?;
+        let last = db.query_row(
+            "SELECT json_extract(json, '$.plan_name'), json_extract(json, '$.outcome') FROM runs WHERE json_extract(json, '$.finished') IS NOT NULL ORDER BY started DESC LIMIT 1",
+            [], |r| Ok(LastOutcome { plan_name: r.get(0)?, outcome: r.get(1)? }),
+        ).optional()?;
+        Ok((count.try_into()?, last))
     }
     pub fn recover_interrupted(&self) -> Result<()> {
         // Recovery must include old unfinished runs, beyond the 100 rows displayed in the UI.

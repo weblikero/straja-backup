@@ -2,11 +2,15 @@
 
 Open-source backup and restore for Windows, created by [Weblike PRO](https://weblike.ro/). Licensed under MIT. Product website: [strajabackup.com](https://strajabackup.com/).
 
-Version **0.4.1** is a preview for Windows x64 (Windows 10 version 1809 or later, including Windows 11). The desktop app and background agent are written in Rust. Encrypted backups use the bundled Restic 0.19.1. Ordinary files and ZIP, TAR.GZ and 7z archives do not require Restic or a separate archive utility.
+Version **0.5.3** is a preview for Windows x64 (Windows 10 version 1809 or later, including Windows 11). The desktop app and background agent are written in Rust. Encrypted backups use the bundled Restic 0.19.1. Ordinary files and ZIP, TAR.GZ and 7z archives do not require Restic or a separate archive utility.
+
+My plans uses compact cards with source/destination, frequency, latest status and next run. Exclusions are summarized as counts; **Details & actions** opens the full paths, exclusions, backup format, retention, diagnostics and secondary actions. Only one plan expands at a time. Details remain readable while a backup is running.
+
+The title bar displays the Straja icon and the running executable version, for example **Straja Backup — v0.5.3**.
 
 ## Install or update
 
-Run `StrajaBackup-0.4.1-windows-x64-setup.exe`. All runtime components are included; installation needs no downloads. The installer offers English, German, Spanish, Portuguese (Portugal), French, Italian and Romanian. English is the initial default; a previous installer language may be remembered.
+Run `StrajaBackup-0.5.3-windows-x64-setup.exe`. All runtime components are included; installation needs no downloads. The installer offers English, German, Spanish, Portuguese (Portugal), French, Italian and Romanian. English is the initial default; a previous installer language may be remembered.
 
 Before updating, wait for backup/restore/verification operations to finish. Choose **Stop agent and tray icon** in the notification icon menu, then close the app. If using the Windows service, stop the service and close the tray icon separately. The installer refuses to overwrite running executables.
 
@@ -16,13 +20,23 @@ Uninstalling removes application files and shortcuts, while keeping plans, prote
 
 ## Portable ZIP and release validation
 
-A portable package, `StrajaBackup-0.4.1-windows-x64-portable.zip`, is also provided. Extract the whole archive to a writable folder and run `StrajaBackup\straja.exe`; keep the agent and Restic next to it. Close older instances first. It uses the same per-user plan database as the installed app and does not register a new Add/remove Programs entry.
+A portable package, `StrajaBackup-0.5.3-windows-x64-portable.zip`, is also provided. Extract the whole archive to a writable folder and run `StrajaBackup\straja.exe`; keep the agent and Restic next to it. Close older instances first. It uses the same per-user plan database as the installed app and does not register a new Add/remove Programs entry.
 
-For this build, application tests and isolated visual checks passed. The installer compiles successfully, but its install/upgrade/uninstall test could not finish in the current Windows session: even a minimal Inno installer without Straja files stalled before installation. Verify the installer on a working Windows session before public distribution. See `VALIDATION.md` for evidence; an installer lifecycle pass is not claimed for 0.4.0 or 0.4.1.
+For 0.5.0, 64 application tests passed, plus strict static checks. The isolated per-user installer passed installation, upgrade, uninstall, Windows registration, file-in-use rejection and data preservation. The invocation used by in-app updates also passed with the installer held under a read-sharing lock, retaining the existing folder and startup tasks. These checks do not constitute a complete published-release-to-restarted-app test. The live GitHub handoff, all-users UAC and actual Windows service restart still require end-to-end validation on disposable installations. See `VALIDATION.md`.
+
+## Resource use
+
+Version 0.5.2 enables GPU rendering with vsync for scrolling and interaction, with software rendering as a fallback when GPU initialization fails. Static translations are indexed and the logo handle is reused. Rendering occurs on demand; idle windows do not run the synthetic scroll probe. GPU rendering can use more graphics memory than software rendering.
+
+Version 0.4.2 reduces idle polling, uses compact tray status and bounded worker pools, and gives background work lower Windows resource priority. Restic uses reduced parallelism and a soft memory target. ZIP, TAR.GZ and 7z favor faster, lighter compression; archives may be larger. Integrity checks remain enabled. See [PERFORMANCE.md](PERFORMANCE.md) for measurements, tradeoffs and limits.
 
 ## Update notifications
 
-From version 0.4.1, the interface checks [GitHub Releases](https://github.com/weblikero/straja-backup/releases) automatically, using a 24-hour cache, and offers **Check for updates** in About. New stable Windows x64 versions show a notification and a button to view the release and download it. Installation is manual; finish backup operations and close the app and agent first. Checking does not require GitHub credentials and does not send backup data. The interface must be open; the service and tray do not check independently. Older versions need one manual upgrade. See [RELEASING.md](RELEASING.md) for publishing instructions and website links.
+The interface checks [GitHub Releases](https://github.com/weblikero/straja-backup/releases) at startup and every 24 hours, using a per-user cache. About offers **Check for updates**. Version 0.5.0 adds **Download update**, followed by **Close and install** and explicit confirmation. No browser download is needed. The installer is streamed to disk with a progress indicator, checked against GitHub's SHA-256 digest and size, and rechecked immediately before use. Cancelling a download keeps the application open.
+
+If a backup, restore or verification is running, choose **Install after the current operation**. Straja waits, temporarily blocks new operations, closes its own interface and tray, asks its idle agent/service to exit, and runs the installer in the same folder and installation scope. It never forcibly terminates an operation. The interface and previously running agent/service reopen afterward, unless Windows requires a restart. Windows may ask for UAC approval. Plans, passwords and backups are kept. Save or close any plan form before updating. **Later** postpones installation; a failed handoff leaves the interface open. Installer failure is reported and Straja attempts to reopen.
+
+Automatic installation requires a correctly named Windows x64 setup asset with a valid GitHub SHA-256 digest in a published stable release. No GitHub account is needed, and backup data is not sent. The interface must be open; the service and tray do not independently check for releases. Existing versions up to 0.4.2 need one manual upgrade to gain in-app installation. Updating a portable copy through this flow installs/registers Straja in its current folder. See [RELEASING.md](RELEASING.md) for publishing instructions and validation limits.
 
 ## Choose your language
 
@@ -82,7 +96,7 @@ Use the scripts from this repository on Windows:
 
 Translations are embedded from `locales\catalog.json`, generated with Python 3 using `scripts\build-locales.py` from the UTF-8 `locales\messages.txt` table. Its first column retains legacy Romanian message templates so stored histories remain readable; the next columns are English, German, Spanish, Portuguese, French and Italian. Translation placeholders are positional (`{0}`, `{1}`, etc.) and validated by the generator and Rust tests. New translations do not change persisted statuses, JSON schemas, plan identities or file formats.
 
-A debug build supports `straja.exe --preview` for visual review with fictitious data. It does not connect to an agent, save preferences, open file pickers or run backups. This option is not included in release builds.
+A debug build supports `straja.exe --preview` (or `--preview-updates --preview-update-confirmation` for the update confirmation) for visual review with fictitious data. It does not connect to an agent, save preferences, open file pickers or run backups. These options are excluded from ordinary release builds. For realistic visual/performance checks, build the isolated fixture with `scripts\cargo.ps1 build --release --features ui-preview --bin straja`; ordinary unoptimized debug rendering is not representative of the installer.
 
 ## Scope
 
