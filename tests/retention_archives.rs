@@ -31,6 +31,8 @@ fn fixture(mode: BackupMode, keep_last: Option<u32>) -> Result<Fixture> {
     fs::write(&single, "sursă individuală")?;
     let store = Store::open(&temp.path().join("state"))?;
     let plan = store.add(NewPlan {
+        remote: None,
+        remote_credentials: None,
         mode,
         keep_last,
         use_vss: false,
@@ -167,6 +169,8 @@ async fn retention_default_edit_failure_unknown_files_and_clock_reversal() -> Re
     let originals = f.engine.snapshots(&f.plan).await?;
     assert_eq!(originals.len(), 3);
     let changes = PlanChanges {
+        remote: None,
+        remote_credentials: None,
         name: f.plan.name.clone(),
         sources: f.plan.sources.clone(),
         repository: f.plan.repository.clone(),

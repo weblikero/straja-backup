@@ -821,6 +821,7 @@ mod metadata_tests {
         assert_eq!(loaded.entries.len(), 180_000);
         assert_eq!(loaded.entries.last().unwrap().size, 179_999);
         let plan = Plan {
+            remote: None,
             mode: BackupMode::Plain,
             id: "large-plan".into(),
             name: "test".into(),

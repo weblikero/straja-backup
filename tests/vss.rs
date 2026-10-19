@@ -22,6 +22,8 @@ fn fixture(mode: BackupMode) -> Result<(tempfile::TempDir, Engine, Plan)> {
     fs::write(&single, b"single file locked")?;
     let store = Store::open(&source.join("StrajaState"))?;
     let plan = store.add(NewPlan {
+        remote: None,
+        remote_credentials: None,
         mode,
         name: "VSS test".into(),
         sources: vec![source.clone(), single],
@@ -49,6 +51,8 @@ fn vss_option_roundtrips_and_old_plans_default_to_disabled() -> Result<()> {
     json.as_object_mut().unwrap().remove("use_vss");
     assert!(!serde_json::from_value::<Plan>(json)?.use_vss);
     let changes = PlanChanges {
+        remote: None,
+        remote_credentials: None,
         name: plan.name.clone(),
         sources: plan.sources.clone(),
         repository: plan.repository.clone(),

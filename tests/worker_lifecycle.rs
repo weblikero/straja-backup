@@ -26,6 +26,8 @@ async fn update_handoff_drains_service_and_preserves_plans() -> Result<()> {
     std::fs::write(source.join("canary.txt"), b"keep source")?;
     let store = Store::open(&root)?;
     let mut plan = store.add(NewPlan {
+        remote: None,
+        remote_credentials: None,
         mode: BackupMode::Plain,
         name: "Update test".into(),
         sources: vec![source.clone()],
@@ -125,6 +127,8 @@ async fn scheduled_and_manual_roundtrip(mode: BackupMode) -> Result<()> {
     std::fs::write(src.join("test.txt"), "scheduled data")?;
     let store = Store::open(&root)?;
     let mut plan = store.add(NewPlan {
+        remote: None,
+        remote_credentials: None,
         mode,
         name: "Scheduled test".into(),
         sources: vec![src],
@@ -289,6 +293,8 @@ async fn manual_failure_is_reported_and_plan_can_be_fixed_without_losing_passwor
     std::fs::write(source.join("document.txt"), "test data")?;
     let store = Store::open(&root)?;
     let plan = store.add(NewPlan {
+        remote: None,
+        remote_credentials: None,
         mode: BackupMode::Encrypted,
         name: "Manual".into(),
         sources: vec![source.clone()],
@@ -347,6 +353,8 @@ async fn manual_failure_is_reported_and_plan_can_be_fixed_without_losing_passwor
         "do not overwrite"
     );
     let changes = PlanChanges {
+        remote: None,
+        remote_credentials: None,
         name: "Corrected".into(),
         sources: vec![source],
         repository: corrected_repo,

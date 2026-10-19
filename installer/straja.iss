@@ -1,5 +1,5 @@
-﻿#ifndef AppVersion
-  #define AppVersion "0.6.2"
+#ifndef AppVersion
+  #define AppVersion "0.7.0"
 #endif
 #ifdef InstallerTest
   #define ProductName "Straja Backup Installer Test"
@@ -203,6 +203,9 @@ Name: "logintray"; Description: "{cm:TrayAtLogin}"; GroupDescription: "{cm:Backg
 Source: "..\dist\StrajaBackup\straja.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\dist\StrajaBackup\straja-agent.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\dist\StrajaBackup\restic.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\StrajaBackup\rclone.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\RCLONE-LICENSE.txt"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\REMOTE.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "assets\straja.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\VSS.md"; DestDir: "{app}"; Flags: ignoreversion
@@ -265,7 +268,8 @@ function ApplicationBusy: Boolean;
 begin
   Result := FileIsLocked(ExpandConstant('{app}\straja.exe')) or
             FileIsLocked(ExpandConstant('{app}\straja-agent.exe')) or
-            FileIsLocked(ExpandConstant('{app}\restic.exe'));
+            FileIsLocked(ExpandConstant('{app}\restic.exe')) or
+            FileIsLocked(ExpandConstant('{app}\rclone.exe'));
 end;
 
 function OwnService: Boolean;

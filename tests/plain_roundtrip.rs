@@ -35,6 +35,8 @@ fn fixture() -> Result<Fixture> {
     fs::write(&single, "single source")?;
     let store = Store::open(&source.join("StrajaState"))?;
     let plan = store.add(NewPlan {
+        remote: None,
+        remote_credentials: None,
         mode: BackupMode::Plain,
         name: "Fără parolă".into(),
         sources: vec![source, second, single],
@@ -94,6 +96,8 @@ async fn readable_versions_restore_exclusions_and_edit_without_password() -> Res
     fs::write(f.plan.sources[0].join("notițe.txt"), "versiunea nouă")?;
     fs::remove_file(&f.plan.sources[2])?;
     let changes = PlanChanges {
+        remote: None,
+        remote_credentials: None,
         name: "Editat".into(),
         sources: f.plan.sources[..2].to_vec(),
         repository: f.plan.repository.clone(),

@@ -13,6 +13,8 @@ fn deleting_plan_preserves_files_history_other_plans_and_handles_offline_paths()
     }
     std::fs::write(source.join("original.txt"), "source data").unwrap();
     let draft = NewPlan {
+        remote: None,
+        remote_credentials: None,
         mode: BackupMode::Encrypted,
         name: "Delete me".into(),
         sources: vec![source.clone()],
@@ -179,6 +181,8 @@ fn secrets_and_schedules_survive_database_reopen() {
     std::fs::create_dir(&dest).unwrap();
     let store = Store::open(&root).unwrap();
     let draft = NewPlan {
+        remote: None,
+        remote_credentials: None,
         mode: BackupMode::Encrypted,
         name: "Documente".into(),
         sources: vec![source.clone()],
@@ -237,6 +241,8 @@ fn edits_preserve_secrets_identity_and_history_and_validate_destination() {
     }
     let store = Store::open(&root).unwrap();
     let draft = NewPlan {
+        remote: None,
+        remote_credentials: None,
         mode: BackupMode::Encrypted,
         name: "Initial".into(),
         sources: vec![source.clone()],
@@ -266,6 +272,8 @@ fn edits_preserve_secrets_identity_and_history_and_validate_destination() {
         .unwrap();
     store.toggle(&plan.id).unwrap();
     let changes = PlanChanges {
+        remote: None,
+        remote_credentials: None,
         name: "Edited".into(),
         sources: vec![source],
         repository: replacement.clone(),

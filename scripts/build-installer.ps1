@@ -2,7 +2,7 @@ param([switch]$SkipBuild, [switch]$TestVariant)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
 if (!$SkipBuild) { & (Join-Path $PSScriptRoot 'package.ps1') }
-foreach ($file in @('straja.exe','straja-agent.exe','restic.exe','README.md','LICENSE','THIRD-PARTY-NOTICES.txt')) {
+foreach ($file in @('straja.exe','straja-agent.exe','restic.exe','rclone.exe','README.md','LICENSE','THIRD-PARTY-NOTICES.txt')) {
     if (!(Test-Path -LiteralPath (Join-Path $projectRoot "dist\StrajaBackup\$file"))) { throw "Fișier lipsă din distribuție: $file" }
 }
 & (Join-Path $PSScriptRoot 'get-inno.ps1')

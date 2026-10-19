@@ -2,15 +2,19 @@
 
 Open-source backup and restore for Windows, created by [Weblike PRO](https://weblike.ro/). Licensed under MIT. Product website: [strajabackup.com](https://strajabackup.com/).
 
-Version **0.6.2** is a preview for Windows x64 (Windows 10 version 1809 or later, including Windows 11). The desktop app and background agent are written in Rust. Encrypted backups use the bundled Restic 0.19.1. Ordinary files and ZIP, TAR.GZ and 7z archives do not require Restic or a separate archive utility.
+Version **0.7.0** is a preview for Windows x64 (Windows 10 version 1809 or later, including Windows 11). The desktop app and background agent are written in Rust. Encrypted backups use the bundled Restic 0.19.1. Ordinary files and ZIP, TAR.GZ and 7z archives do not require Restic or a separate archive utility.
+
+Online destinations now include FTP/explicit FTPS, Google Drive, Dropbox and Amazon S3 for encrypted incremental backups. Connect accounts in the destination step; provider credentials are protected with Windows DPAPI. Rclone 1.75.2 is bundled. See [Online destinations](REMOTE.md) for setup, transfer limits and validation limitations.
+
+Version 0.7.0 passed 79 regression tests plus isolated FTP and HTTPS S3-compatible roundtrips. Real Google Drive/Dropbox consent and Amazon account permissions still require account-specific validation; see [validation details](VALIDATION.md).
 
 My plans uses compact cards with source/destination, frequency, latest status and next run. Exclusions are summarized as counts; **Details & actions** opens the full paths, exclusions, backup format, retention, diagnostics and secondary actions. Only one plan expands at a time. Details remain readable while a backup is running.
 
-The title bar displays the Straja icon and the running executable version, for example **Straja Backup — v0.6.2**.
+The title bar displays the Straja icon and the running executable version, for example **Straja Backup — v0.7.0**.
 
 ## Install or update
 
-Run `StrajaBackup-0.6.2-windows-x64-setup.exe`. The backup engines and archive libraries are included; the installer itself needs no downloads. MSVC builds require the [Microsoft Visual C++ v14 x64 runtime](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170), as did version 0.5.3. The installer offers English, German, Spanish, Portuguese (Portugal), French, Italian and Romanian. English is the initial default; a previous installer language may be remembered.
+Run `StrajaBackup-0.7.0-windows-x64-setup.exe`. The backup engines and archive libraries are included; the installer itself needs no downloads. MSVC builds require the [Microsoft Visual C++ v14 x64 runtime](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170), as did version 0.5.3. The installer offers English, German, Spanish, Portuguese (Portugal), French, Italian and Romanian. English is the initial default; a previous installer language may be remembered.
 
 Before updating, wait for backup/restore/verification operations to finish. Choose **Stop agent and tray icon** in the notification icon menu, then close the app. If using the Windows service, stop the service and close the tray icon separately. The installer refuses to overwrite running executables.
 
@@ -20,7 +24,7 @@ Uninstalling removes application files and shortcuts, while keeping plans, prote
 
 ## Portable ZIP and release validation
 
-A portable package, `StrajaBackup-0.6.2-windows-x64-portable.zip`, is also provided. Extract the whole archive to a writable folder and run `StrajaBackup\straja.exe`; keep the agent and Restic next to it. Close older instances first. It uses the same per-user plan database as the installed app and does not register a new Add/remove Programs entry.
+A portable package, `StrajaBackup-0.7.0-windows-x64-portable.zip`, is also provided. Extract the whole archive to a writable folder and run `StrajaBackup\straja.exe`; keep the agent, Restic and Rclone next to it. Close older instances first. It uses the same per-user plan database as the installed app and does not register a new Add/remove Programs entry.
 
 For 0.5.0, 64 application tests passed, plus strict static checks. The isolated per-user installer passed installation, upgrade, uninstall, Windows registration, file-in-use rejection and data preservation. The invocation used by in-app updates also passed with the installer held under a read-sharing lock, retaining the existing folder and startup tasks. These checks do not constitute a complete published-release-to-restarted-app test. The live GitHub handoff, all-users UAC and actual Windows service restart still require end-to-end validation on disposable installations. See `VALIDATION.md`.
 
@@ -69,7 +73,7 @@ The app can close while the agent continues working. Missed schedules run when t
 
 Unencrypted copies are verified with SHA-256. Archives are read back and verified before publication. Compression temporarily requires space for both the complete uncompressed copy and its archive, in addition to retained backups.
 
-Version 0.6.2 supports manifests up to 512 MiB for ordinary files and all three archive formats. JSON is written compactly and streamed through bounded buffers; archive metadata is compared by size and SHA-256. A conservative metadata-size check runs while scanning, before copying file data. Larger source sets need separate plans. Existing version-1 pretty JSON remains readable; manifests above 64 MiB require version 0.6.2 or later on the restoring PC. The parsed file index still uses memory proportional to the number and length of paths.
+Version 0.7.0 supports manifests up to 512 MiB for ordinary files and all three archive formats. JSON is written compactly and streamed through bounded buffers; archive metadata is compared by size and SHA-256. A conservative metadata-size check runs while scanning, before copying file data. Larger source sets need separate plans. Existing version-1 pretty JSON remains readable; manifests above 64 MiB require version 0.7.0 or later on the restoring PC. The parsed file index still uses memory proportional to the number and length of paths.
 
 If an older backup stopped at the 64 MB metadata limit, its `.in-progress-.../Fisiere` folder remains available for manual file recovery. It lacks the completed manifest and is not automatically resumed or promoted to a verified backup. Upgrade and start a new backup; no partial folder is deleted by this fix.
 

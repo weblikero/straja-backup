@@ -35,3 +35,7 @@ Archive creation and reading are implemented with zip (MIT), tar and flate2 (MIT
 New dependency license texts are included in ARCHIVE-LICENSES.txt. Exact versions and checksums are in Cargo.lock.
 
 GPU rendering uses Iced/wgpu with tiny-skia as a software fallback. Graphics license texts are included in GRAPHICS-LICENSES.txt.
+
+Online destinations use the unmodified Rclone 1.75.2 Windows binary (MIT).
+Copyright (C) 2012 Nick Craig-Wood. License: RCLONE-LICENSE.txt.
+Source and upstream dependency notices: https://github.com/rclone/rclone/tree/v1.75.2

@@ -1,4 +1,4 @@
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Datelike, Duration, Local, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -100,6 +100,8 @@ impl Schedule {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Plan {
     #[serde(default)]
+    pub remote: Option<crate::remote::Destination>,
+    #[serde(default)]
     pub mode: BackupMode,
     pub id: String,
     pub name: String,
@@ -118,9 +120,22 @@ pub struct Plan {
     pub last_success: Option<DateTime<Utc>>,
 }
 
+impl Plan {
+    pub fn destination_label(&self) -> String {
+        self.remote
+            .as_ref()
+            .map(|r| r.label())
+            .unwrap_or_else(|| self.repository.display().to_string())
+    }
+}
+
 // Deliberately no Debug: requests contain a repository password.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct NewPlan {
+    #[serde(default)]
+    pub remote: Option<crate::remote::Destination>,
+    #[serde(default)]
+    pub remote_credentials: Option<crate::remote::Credentials>,
     #[serde(default)]
     pub mode: BackupMode,
     pub name: String,
@@ -160,6 +175,10 @@ impl std::fmt::Display for BackupMode {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlanChanges {
+    #[serde(default)]
+    pub remote: Option<crate::remote::Destination>,
+    #[serde(default)]
+    pub remote_credentials: Option<crate::remote::Credentials>,
     pub name: String,
     pub sources: Vec<PathBuf>,
     pub repository: PathBuf,
@@ -204,6 +223,8 @@ impl NewPlan {
             bail!("Parola nu poate conține caractere de control.");
         }
         PlanChanges {
+            remote: self.remote.clone(),
+            remote_credentials: self.remote_credentials.clone(),
             name: self.name.clone(),
             sources: self.sources.clone(),
             repository: self.repository.clone(),
@@ -217,12 +238,24 @@ impl NewPlan {
         if self.mode != BackupMode::Encrypted {
             crate::plain::exclusions(&self.excludes)?;
         }
-        validate_empty_repository(&self.repository)
+        if let Some(remote) = &self.remote {
+            ensure_remote_mode(self.mode)?;
+            self.remote_credentials
+                .as_ref()
+                .context("Conectează destinația online înainte de salvare.")?
+                .validate(remote.provider)
+        } else {
+            validate_empty_repository(&self.repository)
+        }
     }
 }
 
 impl PlanChanges {
     pub fn validate(&self, data_dir: &Path) -> Result<()> {
+        anyhow::ensure!(
+            self.remote.is_some() || self.remote_credentials.is_none(),
+            "Configurația destinației online nu este validă."
+        );
         if self.name.trim().is_empty() || self.name.len() > 120 {
             bail!("Introdu un nume de maximum 120 de caractere.");
         }
@@ -235,11 +268,19 @@ impl PlanChanges {
             crate::vss::validate_sources(&self.sources)?;
         }
         self.schedule.validate()?;
-        if !self.repository.is_absolute() || !self.repository.is_dir() {
+        if let Some(remote) = &self.remote {
+            remote.validate()?;
+        } else if !self.repository.is_absolute() || !self.repository.is_dir() {
             bail!("Alege un folder de destinație existent, folosind calea completă.");
         }
-        let repo = canonical(&self.repository)?;
-        if overlaps(&repo, &canonical(data_dir)?) {
+        let repo = if self.remote.is_none() {
+            Some(canonical(&self.repository)?)
+        } else {
+            None
+        };
+        if let Some(repo) = &repo
+            && overlaps(repo, &canonical(data_dir)?)
+        {
             bail!("Destinația nu poate suprapune datele aplicației.");
         }
         for source in &self.sources {
@@ -247,7 +288,7 @@ impl PlanChanges {
                 bail!("Sursele trebuie să aibă căi complete.");
             }
             let source = canonical(source)?;
-            if overlaps(&repo, &source) {
+            if repo.as_ref().is_some_and(|repo| overlaps(repo, &source)) {
                 bail!("Sursa și destinația trebuie să fie foldere separate, fără suprapunere.");
             }
         }
@@ -261,6 +302,14 @@ impl PlanChanges {
         }
         Ok(())
     }
+}
+
+pub fn ensure_remote_mode(mode: BackupMode) -> Result<()> {
+    anyhow::ensure!(
+        mode == BackupMode::Encrypted,
+        "Destinațiile online folosesc backup criptat și incremental."
+    );
+    Ok(())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

@@ -10,6 +10,11 @@ pub struct Store {
     pub root: PathBuf,
 }
 
+fn protect_remote(credentials: &crate::remote::Credentials) -> Result<Vec<u8>> {
+    let bytes = zeroize::Zeroizing::new(serde_json::to_vec(credentials)?);
+    security::protect(&bytes)
+}
+
 impl Store {
     pub fn open(root: &Path) -> Result<Self> {
         std::fs::create_dir_all(root)?;
@@ -18,6 +23,7 @@ impl Store {
         };
         store.connect()?.execute_batch("PRAGMA journal_mode=WAL;
             CREATE TABLE IF NOT EXISTS plans(id TEXT PRIMARY KEY, json TEXT NOT NULL, secret BLOB NOT NULL);
+            CREATE TABLE IF NOT EXISTS remote_credentials(id TEXT PRIMARY KEY, secret BLOB NOT NULL);
             CREATE TABLE IF NOT EXISTS runs(id TEXT PRIMARY KEY, started TEXT NOT NULL, json TEXT NOT NULL);
             CREATE INDEX IF NOT EXISTS runs_started ON runs(started DESC);
             CREATE INDEX IF NOT EXISTS runs_finished_started ON runs(started DESC) WHERE json_extract(json, '$.finished') IS NOT NULL;
@@ -57,15 +63,26 @@ impl Store {
         };
         draft.password.zeroize();
         let secret = secret?;
-        let repo = std::fs::canonicalize(&draft.repository)?;
-        for existing in self.plans()? {
-            // An unavailable destination still cannot be registered twice by its saved path.
-            let other = std::fs::canonicalize(&existing.repository).unwrap_or(existing.repository);
-            if overlaps(&repo, &other) {
-                bail!("Acest folder este deja folosit de alt plan. Alege o destinație separată.");
+        if draft.remote.is_none() {
+            let repo = std::fs::canonicalize(&draft.repository)?;
+            for existing in self.plans()?.into_iter().filter(|p| p.remote.is_none()) {
+                // An unavailable destination still cannot be registered twice by its saved path.
+                let other =
+                    std::fs::canonicalize(&existing.repository).unwrap_or(existing.repository);
+                if overlaps(&repo, &other) {
+                    bail!(
+                        "Acest folder este deja folosit de alt plan. Alege o destinație separată."
+                    );
+                }
             }
         }
+        let remote_secret = draft
+            .remote_credentials
+            .as_ref()
+            .map(protect_remote)
+            .transpose()?;
         let plan = Plan {
+            remote: draft.remote,
             mode: draft.mode,
             id: Uuid::new_v4().to_string(),
             name: draft.name.trim().into(),
@@ -80,36 +97,69 @@ impl Store {
             enabled: true,
             last_success: None,
         };
-        self.connect()?.execute(
+        let mut db = self.connect()?;
+        let tx = db.transaction()?;
+        tx.execute(
             "INSERT INTO plans VALUES (?1,?2,?3)",
             params![plan.id, serde_json::to_string(&plan)?, secret],
         )?;
+        if let Some(secret) = remote_secret {
+            tx.execute(
+                "INSERT INTO remote_credentials VALUES (?1,?2)",
+                params![plan.id, secret],
+            )?;
+        }
+        tx.commit()?;
         Ok(plan)
     }
     pub fn update(&self, id: &str, changes: PlanChanges) -> Result<Plan> {
         changes.validate(&self.root)?;
         let mut plan = self.plan(id)?;
-        let repo = std::fs::canonicalize(&changes.repository)?;
-        let old_repo =
-            std::fs::canonicalize(&plan.repository).unwrap_or_else(|_| plan.repository.clone());
-        let changed_repo = repo != old_repo;
-        let initialized = plan.repository.join("config").exists()
-            || plan.repository.join(crate::plain::MARKER).exists();
-        if plan.mode != BackupMode::Encrypted {
-            crate::plain::exclusions(&changes.excludes)?;
-        }
-        if changed_repo && (plan.last_success.is_some() || initialized) {
-            bail!(
-                "Acest plan are deja un depozit inițializat. Pentru altă destinație creează un plan nou; copiile existente rămân accesibile din acest plan."
+        if let Some(remote) = &changes.remote {
+            ensure_remote_mode(plan.mode)?;
+            anyhow::ensure!(
+                plan.remote
+                    .as_ref()
+                    .is_some_and(|old| old.same_location(remote)),
+                "Pentru altă destinație online creează un plan nou."
             );
-        }
-        if changed_repo || !initialized {
-            validate_empty_repository(&changes.repository)?;
-        }
-        for other in self.plans()?.into_iter().filter(|p| p.id != id) {
-            let other_repo = std::fs::canonicalize(&other.repository).unwrap_or(other.repository);
-            if overlaps(&repo, &other_repo) {
-                bail!("Acest folder este deja folosit de alt plan. Alege o destinație separată.");
+            if let Some(credentials) = &changes.remote_credentials {
+                credentials.validate(remote.provider)?;
+            }
+        } else {
+            anyhow::ensure!(
+                plan.remote.is_none(),
+                "Pentru altă destinație online creează un plan nou."
+            );
+            let repo = std::fs::canonicalize(&changes.repository)?;
+            let old_repo =
+                std::fs::canonicalize(&plan.repository).unwrap_or_else(|_| plan.repository.clone());
+            let changed_repo = repo != old_repo;
+            let initialized = plan.repository.join("config").exists()
+                || plan.repository.join(crate::plain::MARKER).exists();
+            if plan.mode != BackupMode::Encrypted {
+                crate::plain::exclusions(&changes.excludes)?;
+            }
+            if changed_repo && (plan.last_success.is_some() || initialized) {
+                bail!(
+                    "Acest plan are deja un depozit inițializat. Pentru altă destinație creează un plan nou; copiile existente rămân accesibile din acest plan."
+                );
+            }
+            if changed_repo || !initialized {
+                validate_empty_repository(&changes.repository)?;
+            }
+            for other in self
+                .plans()?
+                .into_iter()
+                .filter(|p| p.id != id && p.remote.is_none())
+            {
+                let other_repo =
+                    std::fs::canonicalize(&other.repository).unwrap_or(other.repository);
+                if overlaps(&repo, &other_repo) {
+                    bail!(
+                        "Acest folder este deja folosit de alt plan. Alege o destinație separată."
+                    );
+                }
             }
         }
         if plan.schedule != changes.schedule {
@@ -123,9 +173,39 @@ impl Store {
         plan.schedule = changes.schedule;
         plan.keep_last = changes.keep_last;
         plan.use_vss = changes.use_vss;
+        plan.remote = changes.remote;
         // Keep the same ID, encrypted password, history and enabled state.
-        self.save(&plan)?;
+        let secret = changes
+            .remote_credentials
+            .as_ref()
+            .map(protect_remote)
+            .transpose()?;
+        let mut db = self.connect()?;
+        let tx = db.transaction()?;
+        tx.execute(
+            "UPDATE plans SET json=?2 WHERE id=?1",
+            params![plan.id, serde_json::to_string(&plan)?],
+        )?;
+        if let Some(secret) = secret {
+            tx.execute(
+                "INSERT OR REPLACE INTO remote_credentials VALUES (?1,?2)",
+                params![plan.id, secret],
+            )?;
+        }
+        tx.commit()?;
         Ok(plan)
+    }
+    pub fn remote_secret(&self, id: &str) -> Result<crate::remote::Credentials> {
+        let bytes: Vec<u8> = self
+            .connect()?
+            .query_row(
+                "SELECT secret FROM remote_credentials WHERE id=?1",
+                [id],
+                |r| r.get(0),
+            )
+            .context("Conectează destinația online înainte de salvare.")?;
+        let clear = zeroize::Zeroizing::new(security::unprotect(&bytes)?);
+        Ok(serde_json::from_slice(&clear)?)
     }
     pub fn secret(&self, id: &str) -> Result<zeroize::Zeroizing<Vec<u8>>> {
         let bytes: Vec<u8> =
@@ -151,6 +231,7 @@ impl Store {
         }
         // Only configuration and its saved credential are removed. History and disk contents remain.
         tx.execute("DELETE FROM plans WHERE id=?1", [id])?;
+        tx.execute("DELETE FROM remote_credentials WHERE id=?1", [id])?;
         tx.commit()?;
         Ok(plan)
     }

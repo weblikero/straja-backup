@@ -18,7 +18,7 @@ The tray and service do not independently check for updates; open the interface 
 ## Prepare a version
 
 1. Update the package version in `Cargo.toml`, regenerate `Cargo.lock`, and update the guides and installer test default. Keep GUI and agent versions identical.
-2. Run `scripts/test.ps1`, Clippy and formatting checks. Build with `scripts/package.ps1`. Test the actual installer lifecycle on a disposable Windows account before distributing an installer.
+2. Run `scripts/test.ps1`, `scripts/test-remote.ps1`, Clippy and formatting checks. Build with `scripts/package.ps1`. Test the actual installer lifecycle on a disposable Windows account before distributing an installer. See `REMOTE.md` for the isolated remote test prerequisites and real-account validation limitations.
 3. Package the entire `dist/StrajaBackup` folder as `dist/StrajaBackup-X.Y.Z-windows-x64-portable.zip`. Include notices and dependency licenses. Generate a SHA-256 sidecar using the same filename plus `.sha256`.
 4. Build `dist/installer/StrajaBackup-X.Y.Z-windows-x64-setup.exe` and its SHA-256 sidecar using `scripts/build-installer.ps1 -SkipBuild`. Do not upload the test installer.
 5. Commit the reviewed sources, tag the commit `vX.Y.Z`, and push the branch and tag. Exclude local toolchains, build output, logs, databases, keys and personal data.
@@ -45,5 +45,7 @@ The Straja product page can link to https://github.com/weblikero/straja-backup/r
 GitHub API reference: https://docs.github.com/en/rest/releases/releases#get-the-latest-release.
 
 ## Current validation status
+
+Version 0.7.0 passed 79 regression tests, isolated FTP and HTTPS S3-compatible roundtrips, strict Clippy and the isolated installer lifecycle including the new Rclone file lock. Real Google Drive/Dropbox consent and refresh, external FTPS and Amazon account permissions/quotas still need account-specific validation. The native form could not be visually inspected in the available desktop session. See `REMOTE.md` and `VALIDATION.md`.
 
 The 0.6.2 isolated installer lifecycle and 74 Rust tests passed. Installation, upgrade, uninstall, registration, locked-file protection, updater installer arguments and data preservation were exercised. The full GitHub download/helper/restart path, all-users elevation and actual installed SCM service restart have not yet been exercised end to end. After these limitations were explained, the project owner directed stable publication and automatic discovery on 2026-10-19; the earlier draft-only publication hold is superseded. Keep the limitations visible and complete those disposable-machine checks in future validation. See `VALIDATION.md`.

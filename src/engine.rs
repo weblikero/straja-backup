@@ -76,8 +76,24 @@ impl Engine {
                 cmd.env_remove(key);
             }
         }
+        let repository = if let Some(remote) = &plan.remote {
+            ensure_remote_mode(plan.mode)?;
+            let rclone = self.binary.with_file_name("rclone.exe");
+            let credentials = self.store.remote_secret(&plan.id)?;
+            crate::remote::configure(&mut cmd, &rclone, remote, &credentials).await?;
+            // Restic parses this option into words; quote a Windows path with spaces.
+            let program = format!(
+                "rclone.program=\"{}\"",
+                rclone.to_string_lossy().replace('\\', "/")
+            );
+            // The option is first parsed as CSV by Restic, then as command words.
+            cmd.args(["-o", &format!("\"{}\"", program.replace('"', "\"\""))]);
+            format!("rclone:{}", remote.root(&plan.id)?)
+        } else {
+            plan.repository.to_string_lossy().into_owned()
+        };
         cmd.args(["--repo"])
-            .arg(&plan.repository)
+            .arg(repository)
             .arg("--json")
             .arg("--cache-dir")
             .arg(self.store.root.join("cache"))
@@ -148,6 +164,9 @@ impl Engine {
         }
         let status = child.wait().await?;
         let (mut stderr, stderr_vss_error) = errors.await??;
+        if plan.remote.is_some() && !status.success() {
+            stderr="Conexiunea online sau operația de backup a eșuat. Verifică autentificarea, spațiul disponibil și permisiunile destinației.".into();
+        }
         let code = status.code().unwrap_or(-1);
         if vss_error || stderr_vss_error {
             stderr.insert_str(0, "VSS a raportat o eroare. Copia poate conține date citite fără snapshot; nu este considerată completă. ");
@@ -189,6 +208,30 @@ impl Engine {
         Ok(output)
     }
     async fn ensure_repo(&self, plan: &Plan) -> Result<()> {
+        if let Some(remote) = &plan.remote {
+            let credentials = self.store.remote_secret(&plan.id)?;
+            let entries = crate::remote::list(
+                &self.binary.with_file_name("rclone.exe"),
+                remote,
+                &credentials,
+                &plan.id,
+            )
+            .await?;
+            if entries.iter().any(|name| name == "config") {
+                let (c, o, e) = self
+                    .command(plan, &["cat".into(), "config".into()], false)
+                    .await?;
+                Self::checked(c, o, e)?;
+                return Ok(());
+            }
+            anyhow::ensure!(
+                plan.last_success.is_none() && entries.is_empty(),
+                "Destinația online nu este un depozit valid și gol. Nu a fost modificată."
+            );
+            let (c, o, e) = self.command(plan, &["init".into()], false).await?;
+            Self::checked(c, o, e)?;
+            return Ok(());
+        }
         if !plan.repository.is_dir() {
             bail!("Destinația nu este disponibilă. Conectează discul sau verifică rețeaua.");
         }
@@ -220,7 +263,11 @@ impl Engine {
             })
             .await??;
         }
-        let initialized = plan.repository.join("config").exists()
+        if plan.remote.is_some() {
+            self.ensure_repo(plan).await?;
+        }
+        let initialized = plan.remote.is_some()
+            || plan.repository.join("config").exists()
             || plan.repository.join(crate::plain::MARKER).exists();
         let before = if plan.keep_last.is_some() && initialized {
             self.snapshots(plan).await.map(|copies| {
@@ -307,16 +354,24 @@ impl Engine {
             return crate::plain::backup(self, plan).await;
         }
         // Revalidate paths on each run: removable disks and junction targets can change.
-        let repo =
-            std::fs::canonicalize(&plan.repository).context("Destinația nu este disponibilă")?;
+        let repo = if plan.remote.is_none() {
+            Some(
+                std::fs::canonicalize(&plan.repository)
+                    .context("Destinația nu este disponibilă")?,
+            )
+        } else {
+            None
+        };
         for path in &plan.sources {
             let source = std::fs::canonicalize(path)
                 .with_context(|| format!("Sursa nu este disponibilă: {}", path.display()))?;
-            if overlaps(&repo, &source) {
+            if repo.as_ref().is_some_and(|repo| overlaps(repo, &source)) {
                 bail!("Sursa și destinația se suprapun.");
             }
         }
-        self.ensure_repo(plan).await?;
+        if plan.remote.is_none() {
+            self.ensure_repo(plan).await?;
+        }
         self.update("Citesc fișierele…");
         let mut args = vec![
             "backup".into(),
@@ -396,8 +451,13 @@ impl Engine {
         if !parent.is_dir() {
             bail!("Destinația restaurării trebuie să fie un folder.");
         }
-        let repo = std::fs::canonicalize(&plan.repository)?;
-        if overlaps(&parent, &repo) || overlaps(&parent, &std::fs::canonicalize(&self.store.root)?)
+        let repo = if plan.remote.is_none() {
+            Some(std::fs::canonicalize(&plan.repository)?)
+        } else {
+            None
+        };
+        if repo.as_ref().is_some_and(|repo| overlaps(&parent, repo))
+            || overlaps(&parent, &std::fs::canonicalize(&self.store.root)?)
         {
             bail!("Restaurarea trebuie făcută separat de depozit și de datele aplicației.");
         }

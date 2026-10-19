@@ -4,7 +4,7 @@ use crate::{
     protocol::{self, Request, Response},
     store::Store,
 };
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use chrono::Utc;
 use std::{
     path::PathBuf,
@@ -268,6 +268,45 @@ impl Worker {
                     "Planul «{}» a fost șters și programarea a fost eliminată. Istoricul, fișierele sursă și copiile de backup au fost păstrate.",
                     plan.name
                 )))
+            }
+            Request::TestRemote {
+                destination,
+                credentials,
+                plan,
+            } => {
+                anyhow::ensure!(
+                    self.engine.live.lock().unwrap().is_none(),
+                    "Așteaptă terminarea operației curente."
+                );
+                let credentials = match credentials {
+                    Some(value) => value,
+                    None => {
+                        let id = plan
+                            .as_deref()
+                            .context("Conectează destinația online înainte de salvare.")?;
+                        let saved = self.engine.store.plan(id)?;
+                        anyhow::ensure!(
+                            saved
+                                .remote
+                                .as_ref()
+                                .is_some_and(|r| r.same_location(&destination)),
+                            "Pentru altă destinație online creează un plan nou."
+                        );
+                        self.engine.store.remote_secret(id)?
+                    }
+                };
+                let id = plan.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+                crate::remote::list(
+                    &self.engine.binary.with_file_name("rclone.exe"),
+                    &destination,
+                    &credentials,
+                    &id,
+                )
+                .await?;
+                Ok(Response::Ok(
+                    "Conexiune reușită. Accesul de scriere va fi verificat la primul backup."
+                        .into(),
+                ))
             }
             Request::Backup(id) => self.start(&id, "Backup", None),
             Request::Check(id) => self.start(&id, "Verificare", None),
@@ -535,6 +574,8 @@ mod tests {
         let store = Store::open(&tmp.path().join("app")).unwrap();
         let plan = store
             .add(NewPlan {
+                remote: None,
+                remote_credentials: None,
                 keep_last: None,
                 use_vss: false,
                 mode: BackupMode::Plain,

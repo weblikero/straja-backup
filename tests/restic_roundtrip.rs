@@ -24,6 +24,8 @@ async fn real_backup_incremental_history_restore_and_integrity() -> Result<()> {
     // encrypted credentials and live cache must never become backup sources.
     let store = Store::open(&source.join("StrajaState"))?;
     let p = store.add(NewPlan {
+        remote: None,
+        remote_credentials: None,
         mode: BackupMode::Encrypted,
         name: "Roundtrip".into(),
         sources: vec![source.clone()],
@@ -89,6 +91,8 @@ async fn real_backup_incremental_history_restore_and_integrity() -> Result<()> {
     wrong.id = engine
         .store
         .add(NewPlan {
+            remote: None,
+            remote_credentials: None,
             mode: BackupMode::Encrypted,
             name: "Wrong key".into(),
             sources: vec![source],

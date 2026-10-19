@@ -1,3 +1,5 @@
+Versiunea 0.7.0 adaugă destinații FTP/FTPS, Google Drive, Dropbox și Amazon S3 pentru backup criptat incremental. Ghid: [REMOTE.md](REMOTE.md). Formatele necriptate și arhivele rămân disponibile pentru destinațiile locale/de rețea.
+
 > Actualizare 0.6.2: manifestele pentru fișiere necriptate și arhive acceptă până la 512 MiB. Citirea, scrierea și verificarea metadatelor folosesc buffere limitate; dimensiunea estimată se verifică înainte de copiere. Copiile întrerupte de limita veche rămân disponibile în `.in-progress-.../Fisiere`, dar necesită o rulare nouă pentru un backup complet validat.
 
 > Actualizare 0.5.3: „Planurile mele” afișează carduri compacte cu sursa, destinația, frecvența, ultima stare și următoarea rulare. Excluderile, mesajele și acțiunile secundare sunt în „Detalii și acțiuni”.

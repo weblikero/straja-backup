@@ -75,6 +75,8 @@ async fn exercise(mode: BackupMode) -> Result<()> {
     fs::write(source.join("temp.tmp"), "excluded by wildcard")?;
     let store = Store::open(&temp.path().join("state"))?;
     let plan = store.add(NewPlan {
+        remote: None,
+        remote_credentials: None,
         mode,
         name: "Excluderi selectate".into(),
         sources: vec![source.clone()],
@@ -143,6 +145,8 @@ async fn exercise(mode: BackupMode) -> Result<()> {
     let edited = engine.store.update(
         &plan.id,
         PlanChanges {
+            remote: None,
+            remote_credentials: None,
             name: plan.name.clone(),
             sources: plan.sources.clone(),
             repository: plan.repository.clone(),

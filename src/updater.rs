@@ -341,7 +341,7 @@ fn close_tray(target: &Path) {
     }
 }
 fn unlocked(target: &Path, all_users: bool) -> bool {
-    ["straja.exe", "straja-agent.exe", "restic.exe"]
+    ["straja.exe", "straja-agent.exe", "restic.exe", "rclone.exe"]
         .iter()
         .all(|name| {
             let file = target.join(name);
@@ -720,5 +720,15 @@ mod tests {
         drop(guard);
         assert!(unlocked(root.path(), false));
         assert_eq!(std::fs::read(path).unwrap(), b"app");
+        let transfer = root.path().join("rclone.exe");
+        std::fs::write(&transfer, b"transfer").unwrap();
+        let guard = OpenOptions::new()
+            .read(true)
+            .share_mode(1)
+            .open(&transfer)
+            .unwrap();
+        assert!(!unlocked(root.path(), false));
+        drop(guard);
+        assert!(unlocked(root.path(), false));
     }
 }

@@ -1,4 +1,4 @@
-﻿param([string]$Version = '0.6.2', [ValidateSet('english','german','spanish','portuguese','french','italian','romanian')][string]$Language = 'english')
+param([string]$Version = '0.7.0', [ValidateSet('english','german','spanish','portuguese','french','italian','romanian')][string]$Language = 'english')
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
 $setup = Join-Path $projectRoot "dist\installer\StrajaBackup-$Version-windows-x64-test-setup.exe"
@@ -66,7 +66,7 @@ try {
     Assert-Test ((Test-Path -LiteralPath $menuLink) -and (Test-Path -LiteralPath $desktopLink)) 'Lipsesc scurtăturile.'
     Assert-Test ((Read-StartupEntry) -eq ('"' + (Join-Path $appDir 'straja-agent.exe') + '"')) 'Pornirea la autentificare nu este înregistrată.'
     Assert-Test ((Read-StartupEntry ($runName + 'Tray')) -eq ('"' + (Join-Path $appDir 'straja-agent.exe') + '" --tray')) 'Pictograma nu este înregistrată pentru autentificare.'
-    foreach ($file in @('straja.exe','straja-agent.exe','restic.exe')) {
+    foreach ($file in @('straja.exe','straja-agent.exe','restic.exe','rclone.exe')) {
         $sourceHash = (Get-FileHash -LiteralPath (Join-Path $projectRoot "dist\StrajaBackup\$file")).Hash
         Assert-Test ((Get-FileHash -LiteralPath (Join-Path $appDir $file)).Hash -eq $sourceHash) "Conținut diferit: $file"
     }
@@ -82,6 +82,11 @@ try {
         Assert-Test ((Invoke-TestProcess $uninstaller @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') 'locked-uninstall') -ne 0) 'Dezinstalarea nu a refuzat fișierul în uz.'
         Assert-Test ($null -ne (Read-UninstallEntry)) 'Dezinstalarea blocată a eliminat înregistrarea.'
     } finally { $lockedFile.Dispose() }
+
+    $transferLock = [IO.File]::Open((Join-Path $appDir 'rclone.exe'), [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    try {
+        Assert-Test ((Invoke-TestProcess $setup ($common + '/TASKS=""') 'locked-transfer-upgrade') -ne 0) 'Upgrade did not refuse an active transfer binary.'
+    } finally { $transferLock.Dispose() }
 
     # Match the in-app updater's arguments and read-sharing lock on the installer.
     $inAppArgs = @('/SP-','/SILENT','/SUPPRESSMSGBOXES','/NORESTART','/NOCLOSEAPPLICATIONS','/NORESTARTAPPLICATIONS','/RESTARTEXITCODE=3010','/CURRENTUSER',('/LANG=' + $Language),('/DIR="' + $appDir + '"'))
@@ -105,7 +110,7 @@ try {
     Assert-Test ($null -eq (Read-StartupEntry)) 'Intrarea Run a rămas după dezinstalare.'
     Assert-Test ($null -eq (Read-StartupEntry ($runName + 'Tray'))) 'Intrarea Run a pictogramei a rămas după dezinstalare.'
     Assert-Test (!(Test-Path -LiteralPath $menuLink) -and !(Test-Path -LiteralPath $desktopLink)) 'Scurtăturile au rămas după dezinstalare.'
-    foreach ($file in @('straja.exe','straja-agent.exe','restic.exe','straja.ico')) {
+    foreach ($file in @('straja.exe','straja-agent.exe','restic.exe','rclone.exe','straja.ico')) {
         Assert-Test (!(Test-Path -LiteralPath (Join-Path $appDir $file))) "Fișier rămas: $file"
     }
     Assert-Test ((Get-FileHash -LiteralPath $marker).Hash -eq $markerHash) 'Dezinstalarea a șters fișierele utilizatorului.'

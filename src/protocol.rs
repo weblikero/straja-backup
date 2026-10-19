@@ -27,6 +27,11 @@ pub enum Request {
     },
     Check(String),
     Toggle(String),
+    TestRemote {
+        destination: crate::remote::Destination,
+        credentials: Option<crate::remote::Credentials>,
+        plan: Option<String>,
+    },
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Response {

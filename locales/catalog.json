@@ -6262,5 +6262,621 @@
       "Trop de métadonnées pour une sauvegarde (512 Mo maximum). Répartissez les sources entre plusieurs plans.",
       "Troppi metadati per un backup (massimo 512 MB). Suddividi le origini in più piani."
     ]
+  },
+  {
+    "source": "Disc local / rețea",
+    "parts": [
+      "Disc local / rețea"
+    ],
+    "values": [
+      "Local / network folder",
+      "Lokaler Ordner / Netzwerk",
+      "Carpeta local / de red",
+      "Pasta local / de rede",
+      "Dossier local / réseau",
+      "Cartella locale / di rete"
+    ]
+  },
+  {
+    "source": "Destinația backupului",
+    "parts": [
+      "Destinația backupului"
+    ],
+    "values": [
+      "Backup destination",
+      "Sicherungsziel",
+      "Destino de la copia",
+      "Destino da cópia",
+      "Destination de sauvegarde",
+      "Destinazione del backup"
+    ]
+  },
+  {
+    "source": "Destinațiile online folosesc backup criptat și incremental.",
+    "parts": [
+      "Destinațiile online folosesc backup criptat și incremental."
+    ],
+    "values": [
+      "Online destinations use encrypted, incremental backups.",
+      "Online-Ziele verwenden verschlüsselte, inkrementelle Backups.",
+      "Los destinos en línea usan copias cifradas e incrementales.",
+      "Os destinos online usam cópias encriptadas e incrementais.",
+      "Les destinations en ligne utilisent des sauvegardes chiffrées et incrémentales.",
+      "Le destinazioni online usano backup crittografati e incrementali."
+    ]
+  },
+  {
+    "source": "Server FTP",
+    "parts": [
+      "Server FTP"
+    ],
+    "values": [
+      "FTP server",
+      "FTP-Server",
+      "Servidor FTP",
+      "Servidor FTP",
+      "Serveur FTP",
+      "Server FTP"
+    ]
+  },
+  {
+    "source": "Port",
+    "parts": [
+      "Port"
+    ],
+    "values": [
+      "Port",
+      "Port",
+      "Puerto",
+      "Porta",
+      "Port",
+      "Porta"
+    ]
+  },
+  {
+    "source": "Utilizator FTP",
+    "parts": [
+      "Utilizator FTP"
+    ],
+    "values": [
+      "FTP username",
+      "FTP-Benutzername",
+      "Usuario FTP",
+      "Utilizador FTP",
+      "Utilisateur FTP",
+      "Nome utente FTP"
+    ]
+  },
+  {
+    "source": "Parolă FTP",
+    "parts": [
+      "Parolă FTP"
+    ],
+    "values": [
+      "FTP password",
+      "FTP-Passwort",
+      "Contraseña FTP",
+      "Palavra-passe FTP",
+      "Mot de passe FTP",
+      "Password FTP"
+    ]
+  },
+  {
+    "source": "FTPS explicit (TLS)",
+    "parts": [
+      "FTPS explicit (TLS)"
+    ],
+    "values": [
+      "Explicit FTPS (TLS)",
+      "Explizites FTPS (TLS)",
+      "FTPS explícito (TLS)",
+      "FTPS explícito (TLS)",
+      "FTPS explicite (TLS)",
+      "FTPS esplicito (TLS)"
+    ]
+  },
+  {
+    "source": "FTP fără TLS transmite autentificarea fără criptare. Folosește FTPS dacă serverul permite.",
+    "parts": [
+      "FTP fără TLS transmite autentificarea fără criptare. Folosește FTPS dacă serverul permite."
+    ],
+    "values": [
+      "FTP without TLS sends credentials without encryption. Use FTPS if your server supports it.",
+      "FTP ohne TLS überträgt Zugangsdaten unverschlüsselt. Verwende FTPS, wenn dein Server es unterstützt.",
+      "FTP sin TLS envía las credenciales sin cifrar. Usa FTPS si tu servidor lo admite.",
+      "FTP sem TLS envia credenciais sem encriptação. Usa FTPS se o servidor o permitir.",
+      "FTP sans TLS transmet les identifiants sans chiffrement. Utilisez FTPS si votre serveur le permet.",
+      "FTP senza TLS invia le credenziali senza crittografia. Usa FTPS se il server lo supporta."
+    ]
+  },
+  {
+    "source": "Bucket Amazon S3 existent",
+    "parts": [
+      "Bucket Amazon S3 existent"
+    ],
+    "values": [
+      "Existing Amazon S3 bucket",
+      "Vorhandener Amazon-S3-Bucket",
+      "Bucket existente de Amazon S3",
+      "Bucket Amazon S3 existente",
+      "Bucket Amazon S3 existant",
+      "Bucket Amazon S3 esistente"
+    ]
+  },
+  {
+    "source": "Regiune AWS (de exemplu eu-central-1)",
+    "parts": [
+      "Regiune AWS (de exemplu eu-central-1)"
+    ],
+    "values": [
+      "AWS region (for example eu-central-1)",
+      "AWS-Region (z. B. eu-central-1)",
+      "Región AWS (por ejemplo eu-central-1)",
+      "Região AWS (por exemplo eu-central-1)",
+      "Région AWS (par exemple eu-central-1)",
+      "Regione AWS (ad esempio eu-central-1)"
+    ]
+  },
+  {
+    "source": "Conectează contul în browser",
+    "parts": [
+      "Conectează contul în browser"
+    ],
+    "values": [
+      "Connect account in browser",
+      "Konto im Browser verbinden",
+      "Conectar cuenta en el navegador",
+      "Ligar conta no navegador",
+      "Connecter le compte dans le navigateur",
+      "Collega account nel browser"
+    ]
+  },
+  {
+    "source": "Cont conectat.",
+    "parts": [
+      "Cont conectat."
+    ],
+    "values": [
+      "Account connected.",
+      "Konto verbunden.",
+      "Cuenta conectada.",
+      "Conta ligada.",
+      "Compte connecté.",
+      "Account collegato."
+    ]
+  },
+  {
+    "source": "Folder online (de exemplu StrajaBackup)",
+    "parts": [
+      "Folder online (de exemplu StrajaBackup)"
+    ],
+    "values": [
+      "Online folder (for example StrajaBackup)",
+      "Online-Ordner (z. B. StrajaBackup)",
+      "Carpeta en línea (por ejemplo StrajaBackup)",
+      "Pasta online (por exemplo StrajaBackup)",
+      "Dossier en ligne (par exemple StrajaBackup)",
+      "Cartella online (ad esempio StrajaBackup)"
+    ]
+  },
+  {
+    "source": "Fiecare plan folosește un subfolder propriu. Parola backupului este separată de autentificarea contului.",
+    "parts": [
+      "Fiecare plan folosește un subfolder propriu. Parola backupului este separată de autentificarea contului."
+    ],
+    "values": [
+      "Each plan uses its own subfolder. The backup password is separate from your account credentials.",
+      "Jeder Plan verwendet einen eigenen Unterordner. Das Backup-Passwort ist von den Kontozugangsdaten getrennt.",
+      "Cada plan usa su propia subcarpeta. La contraseña de la copia es independiente de las credenciales de la cuenta.",
+      "Cada plano usa a sua própria subpasta. A palavra-passe da cópia é independente das credenciais da conta.",
+      "Chaque plan utilise son propre sous-dossier. Le mot de passe de sauvegarde est distinct des identifiants du compte.",
+      "Ogni piano usa una sottocartella propria. La password del backup è separata dalle credenziali dell'account."
+    ]
+  },
+  {
+    "source": "Limită transfer KiB/s (0 = fără limită)",
+    "parts": [
+      "Limită transfer KiB/s (0 = fără limită)"
+    ],
+    "values": [
+      "Transfer limit KiB/s (0 = unlimited)",
+      "Übertragungslimit KiB/s (0 = unbegrenzt)",
+      "Límite de transferencia KiB/s (0 = sin límite)",
+      "Limite de transferência KiB/s (0 = sem limite)",
+      "Limite de transfert Kio/s (0 = illimité)",
+      "Limite di trasferimento KiB/s (0 = illimitato)"
+    ]
+  },
+  {
+    "source": "Lasă autentificarea necompletată pentru a păstra datele salvate. Pentru altă destinație creează un plan nou.",
+    "parts": [
+      "Lasă autentificarea necompletată pentru a păstra datele salvate. Pentru altă destinație creează un plan nou."
+    ],
+    "values": [
+      "Leave credentials blank to keep saved access. Create a new plan for another destination.",
+      "Lasse die Zugangsdaten leer, um den gespeicherten Zugang zu behalten. Erstelle für ein anderes Ziel einen neuen Plan.",
+      "Deja las credenciales vacías para conservar el acceso guardado. Crea otro plan para un destino distinto.",
+      "Deixa as credenciais vazias para manter o acesso guardado. Cria um novo plano para outro destino.",
+      "Laissez les identifiants vides pour conserver l'accès enregistré. Créez un autre plan pour une nouvelle destination.",
+      "Lascia vuote le credenziali per mantenere l'accesso salvato. Crea un nuovo piano per un'altra destinazione."
+    ]
+  },
+  {
+    "source": "Testează conexiunea",
+    "parts": [
+      "Testează conexiunea"
+    ],
+    "values": [
+      "Test connection",
+      "Verbindung testen",
+      "Probar conexión",
+      "Testar ligação",
+      "Tester la connexion",
+      "Verifica connessione"
+    ]
+  },
+  {
+    "source": "Testez conexiunea…",
+    "parts": [
+      "Testez conexiunea…"
+    ],
+    "values": [
+      "Testing connection…",
+      "Verbindung wird getestet…",
+      "Probando conexión…",
+      "A testar ligação…",
+      "Test de connexion…",
+      "Verifica connessione…"
+    ]
+  },
+  {
+    "source": "Termină autentificarea în browser (maximum 3 minute).",
+    "parts": [
+      "Termină autentificarea în browser (maximum 3 minute)."
+    ],
+    "values": [
+      "Complete sign-in in your browser (up to 3 minutes).",
+      "Schließe die Anmeldung im Browser ab (bis zu 3 Minuten).",
+      "Completa el inicio de sesión en el navegador (hasta 3 minutos).",
+      "Conclui o início de sessão no navegador (até 3 minutos).",
+      "Terminez la connexion dans le navigateur (3 minutes maximum).",
+      "Completa l'accesso nel browser (massimo 3 minuti)."
+    ]
+  },
+  {
+    "source": "Conexiune reușită. Accesul de scriere va fi verificat la primul backup.",
+    "parts": [
+      "Conexiune reușită. Accesul de scriere va fi verificat la primul backup."
+    ],
+    "values": [
+      "Connection successful. Write access will be checked during the first backup.",
+      "Verbindung erfolgreich. Schreibzugriff wird beim ersten Backup geprüft.",
+      "Conexión correcta. El acceso de escritura se comprobará en la primera copia.",
+      "Ligação bem-sucedida. O acesso de escrita será verificado na primeira cópia.",
+      "Connexion réussie. L'accès en écriture sera vérifié lors de la première sauvegarde.",
+      "Connessione riuscita. L'accesso in scrittura sarà verificato durante il primo backup."
+    ]
+  },
+  {
+    "source": "Conexiunea online a eșuat.",
+    "parts": [
+      "Conexiunea online a eșuat."
+    ],
+    "values": [
+      "Online connection failed.",
+      "Online-Verbindung fehlgeschlagen.",
+      "Falló la conexión en línea.",
+      "A ligação online falhou.",
+      "La connexion en ligne a échoué.",
+      "Connessione online non riuscita."
+    ]
+  },
+  {
+    "source": "Alege o destinație online.",
+    "parts": [
+      "Alege o destinație online."
+    ],
+    "values": [
+      "Choose an online destination.",
+      "Wähle ein Online-Ziel.",
+      "Elige un destino en línea.",
+      "Escolhe um destino online.",
+      "Choisissez une destination en ligne.",
+      "Scegli una destinazione online."
+    ]
+  },
+  {
+    "source": "Configurația destinației online nu este validă.",
+    "parts": [
+      "Configurația destinației online nu este validă."
+    ],
+    "values": [
+      "The online destination settings are invalid.",
+      "Die Einstellungen des Online-Ziels sind ungültig.",
+      "La configuración del destino en línea no es válida.",
+      "As definições do destino online são inválidas.",
+      "Les paramètres de destination en ligne sont invalides.",
+      "Le impostazioni della destinazione online non sono valide."
+    ]
+  },
+  {
+    "source": "Alege un subfolder online relativ, fără .. sau caractere speciale.",
+    "parts": [
+      "Alege un subfolder online relativ, fără .. sau caractere speciale."
+    ],
+    "values": [
+      "Choose a relative online subfolder without .. or special characters.",
+      "Wähle einen relativen Online-Unterordner ohne .. oder Sonderzeichen.",
+      "Elige una subcarpeta relativa sin .. ni caracteres especiales.",
+      "Escolhe uma subpasta relativa sem .. nem caracteres especiais.",
+      "Choisissez un sous-dossier relatif sans .. ni caractères spéciaux.",
+      "Scegli una sottocartella relativa senza .. o caratteri speciali."
+    ]
+  },
+  {
+    "source": "Completează serverul FTP, portul și utilizatorul.",
+    "parts": [
+      "Completează serverul FTP, portul și utilizatorul."
+    ],
+    "values": [
+      "Enter the FTP server, port and username.",
+      "Gib FTP-Server, Port und Benutzernamen ein.",
+      "Introduce el servidor FTP, puerto y usuario.",
+      "Introduz o servidor FTP, porta e utilizador.",
+      "Saisissez le serveur FTP, le port et l'utilisateur.",
+      "Inserisci server FTP, porta e nome utente."
+    ]
+  },
+  {
+    "source": "Completează bucketul Amazon S3 și regiunea.",
+    "parts": [
+      "Completează bucketul Amazon S3 și regiunea."
+    ],
+    "values": [
+      "Enter the Amazon S3 bucket and region.",
+      "Gib den Amazon-S3-Bucket und die Region ein.",
+      "Introduce el bucket de Amazon S3 y la región.",
+      "Introduz o bucket Amazon S3 e a região.",
+      "Saisissez le bucket Amazon S3 et la région.",
+      "Inserisci il bucket Amazon S3 e la regione."
+    ]
+  },
+  {
+    "source": "Limita de transfer este prea mare.",
+    "parts": [
+      "Limita de transfer este prea mare."
+    ],
+    "values": [
+      "The transfer limit is too high.",
+      "Das Übertragungslimit ist zu hoch.",
+      "El límite de transferencia es demasiado alto.",
+      "O limite de transferência é demasiado alto.",
+      "La limite de transfert est trop élevée.",
+      "Il limite di trasferimento è troppo alto."
+    ]
+  },
+  {
+    "source": "Datele de autentificare nu sunt valide.",
+    "parts": [
+      "Datele de autentificare nu sunt valide."
+    ],
+    "values": [
+      "The credentials are invalid.",
+      "Die Zugangsdaten sind ungültig.",
+      "Las credenciales no son válidas.",
+      "As credenciais são inválidas.",
+      "Les identifiants sont invalides.",
+      "Le credenziali non sono valide."
+    ]
+  },
+  {
+    "source": "Introdu parola FTP.",
+    "parts": [
+      "Introdu parola FTP."
+    ],
+    "values": [
+      "Enter the FTP password.",
+      "Gib das FTP-Passwort ein.",
+      "Introduce la contraseña FTP.",
+      "Introduz a palavra-passe FTP.",
+      "Saisissez le mot de passe FTP.",
+      "Inserisci la password FTP."
+    ]
+  },
+  {
+    "source": "Introdu Access Key ID și Secret Access Key.",
+    "parts": [
+      "Introdu Access Key ID și Secret Access Key."
+    ],
+    "values": [
+      "Enter Access Key ID and Secret Access Key.",
+      "Gib Access Key ID und Secret Access Key ein.",
+      "Introduce Access Key ID y Secret Access Key.",
+      "Introduz Access Key ID e Secret Access Key.",
+      "Saisissez Access Key ID et Secret Access Key.",
+      "Inserisci Access Key ID e Secret Access Key."
+    ]
+  },
+  {
+    "source": "Conectează contul online din nou.",
+    "parts": [
+      "Conectează contul online din nou."
+    ],
+    "values": [
+      "Reconnect your online account.",
+      "Verbinde dein Online-Konto erneut.",
+      "Vuelve a conectar tu cuenta.",
+      "Liga novamente a conta online.",
+      "Reconnectez votre compte en ligne.",
+      "Ricollega il tuo account online."
+    ]
+  },
+  {
+    "source": "Conectează destinația online înainte de salvare.",
+    "parts": [
+      "Conectează destinația online înainte de salvare."
+    ],
+    "values": [
+      "Connect the online destination before saving.",
+      "Verbinde das Online-Ziel vor dem Speichern.",
+      "Conecta el destino en línea antes de guardar.",
+      "Liga o destino online antes de guardar.",
+      "Connectez la destination en ligne avant d'enregistrer.",
+      "Collega la destinazione online prima di salvare."
+    ]
+  },
+  {
+    "source": "Pentru altă destinație online creează un plan nou.",
+    "parts": [
+      "Pentru altă destinație online creează un plan nou."
+    ],
+    "values": [
+      "Create a new plan for another online destination.",
+      "Erstelle für ein anderes Online-Ziel einen neuen Plan.",
+      "Crea otro plan para un destino en línea distinto.",
+      "Cria um novo plano para outro destino online.",
+      "Créez un nouveau plan pour une autre destination en ligne.",
+      "Crea un nuovo piano per un'altra destinazione online."
+    ]
+  },
+  {
+    "source": "Răspuns online prea mare.",
+    "parts": [
+      "Răspuns online prea mare."
+    ],
+    "values": [
+      "The online response is too large.",
+      "Die Online-Antwort ist zu groß.",
+      "La respuesta en línea es demasiado grande.",
+      "A resposta online é demasiado grande.",
+      "La réponse en ligne est trop volumineuse.",
+      "La risposta online è troppo grande."
+    ]
+  },
+  {
+    "source": "rclone.exe lipsește sau nu poate porni.",
+    "parts": [
+      "rclone.exe lipsește sau nu poate porni."
+    ],
+    "values": [
+      "rclone.exe is missing or cannot start.",
+      "rclone.exe fehlt oder kann nicht starten.",
+      "Falta rclone.exe o no puede iniciarse.",
+      "rclone.exe está em falta ou não pode iniciar.",
+      "rclone.exe est absent ou ne peut pas démarrer.",
+      "rclone.exe manca o non può avviarsi."
+    ]
+  },
+  {
+    "source": "rclone.exe lipsește. Reinstalează Straja.",
+    "parts": [
+      "rclone.exe lipsește. Reinstalează Straja."
+    ],
+    "values": [
+      "rclone.exe is missing. Reinstall Straja.",
+      "rclone.exe fehlt. Installiere Straja neu.",
+      "Falta rclone.exe. Reinstala Straja.",
+      "rclone.exe está em falta. Reinstala o Straja.",
+      "rclone.exe est absent. Réinstallez Straja.",
+      "rclone.exe manca. Reinstalla Straja."
+    ]
+  },
+  {
+    "source": "Conexiunea online a expirat. Încearcă din nou.",
+    "parts": [
+      "Conexiunea online a expirat. Încearcă din nou."
+    ],
+    "values": [
+      "The online connection timed out. Try again.",
+      "Zeitüberschreitung der Online-Verbindung. Versuche es erneut.",
+      "La conexión en línea agotó el tiempo. Inténtalo de nuevo.",
+      "A ligação online excedeu o tempo. Tenta novamente.",
+      "La connexion en ligne a expiré. Réessayez.",
+      "La connessione online è scaduta. Riprova."
+    ]
+  },
+  {
+    "source": "Pregătirea autentificării FTP a eșuat.",
+    "parts": [
+      "Pregătirea autentificării FTP a eșuat."
+    ],
+    "values": [
+      "Preparing FTP authentication failed.",
+      "Vorbereitung der FTP-Anmeldung fehlgeschlagen.",
+      "Falló la preparación de la autenticación FTP.",
+      "Falhou a preparação da autenticação FTP.",
+      "La préparation de l'authentification FTP a échoué.",
+      "Preparazione dell'autenticazione FTP non riuscita."
+    ]
+  },
+  {
+    "source": "Conexiunea online a eșuat. Verifică autentificarea, permisiunile și rețeaua.",
+    "parts": [
+      "Conexiunea online a eșuat. Verifică autentificarea, permisiunile și rețeaua."
+    ],
+    "values": [
+      "Online connection failed. Check credentials, permissions and network access.",
+      "Online-Verbindung fehlgeschlagen. Prüfe Zugangsdaten, Berechtigungen und Netzwerk.",
+      "Falló la conexión en línea. Comprueba las credenciales, permisos y red.",
+      "A ligação online falhou. Verifica credenciais, permissões e rede.",
+      "La connexion en ligne a échoué. Vérifiez les identifiants, les autorisations et le réseau.",
+      "Connessione online non riuscita. Verifica credenziali, autorizzazioni e rete."
+    ]
+  },
+  {
+    "source": "Acest serviciu nu folosește autentificare în browser.",
+    "parts": [
+      "Acest serviciu nu folosește autentificare în browser."
+    ],
+    "values": [
+      "This service does not use browser sign-in.",
+      "Dieser Dienst verwendet keine Browser-Anmeldung.",
+      "Este servicio no utiliza inicio de sesión en el navegador.",
+      "Este serviço não usa início de sessão no navegador.",
+      "Ce service n'utilise pas la connexion par navigateur.",
+      "Questo servizio non usa l'accesso tramite browser."
+    ]
+  },
+  {
+    "source": "Autentificarea a fost anulată sau a eșuat.",
+    "parts": [
+      "Autentificarea a fost anulată sau a eșuat."
+    ],
+    "values": [
+      "Sign-in was cancelled or failed.",
+      "Anmeldung abgebrochen oder fehlgeschlagen.",
+      "El inicio de sesión se canceló o falló.",
+      "O início de sessão foi cancelado ou falhou.",
+      "La connexion a été annulée ou a échoué.",
+      "L'accesso è stato annullato o non è riuscito."
+    ]
+  },
+  {
+    "source": "Conexiunea online sau operația de backup a eșuat. Verifică autentificarea, spațiul disponibil și permisiunile destinației.",
+    "parts": [
+      "Conexiunea online sau operația de backup a eșuat. Verifică autentificarea, spațiul disponibil și permisiunile destinației."
+    ],
+    "values": [
+      "The online connection or backup operation failed. Check credentials, available space and destination permissions.",
+      "Online-Verbindung oder Backup fehlgeschlagen. Prüfe Zugangsdaten, freien Speicher und Zielberechtigungen.",
+      "Falló la conexión en línea o la copia. Comprueba credenciales, espacio y permisos del destino.",
+      "A ligação online ou a cópia falhou. Verifica credenciais, espaço e permissões do destino.",
+      "La connexion en ligne ou la sauvegarde a échoué. Vérifiez les identifiants, l'espace disponible et les autorisations.",
+      "Connessione online o backup non riuscito. Verifica credenziali, spazio disponibile e autorizzazioni della destinazione."
+    ]
+  },
+  {
+    "source": "Destinația online nu este un depozit valid și gol. Nu a fost modificată.",
+    "parts": [
+      "Destinația online nu este un depozit valid și gol. Nu a fost modificată."
+    ],
+    "values": [
+      "The online destination is not a valid repository or empty folder. It was not modified.",
+      "Das Online-Ziel ist weder ein gültiges Repository noch ein leerer Ordner. Es wurde nicht verändert.",
+      "El destino en línea no es un repositorio válido ni una carpeta vacía. No se ha modificado.",
+      "O destino online não é um repositório válido nem uma pasta vazia. Não foi alterado.",
+      "La destination en ligne n'est ni un dépôt valide ni un dossier vide. Elle n'a pas été modifiée.",
+      "La destinazione online non è un repository valido né una cartella vuota. Non è stata modificata."
+    ]
   }
 ]

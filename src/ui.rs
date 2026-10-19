@@ -9,6 +9,7 @@ use iced::{
 };
 use std::{path::PathBuf, time::Duration};
 use straja::i18n::{self, Language, tr};
+use straja::remote::{self, Provider};
 use straja::updates::{self, CheckError, Update};
 use straja::{
     model::*,
@@ -190,6 +191,7 @@ pub fn preview() -> iced::Result {
                 }
             }
             app.state.plans.push(Plan {
+            remote: None,
                 mode: BackupMode::Plain, id: "preview".into(), name: "My projects · Grüße".into(),
                 sources: vec![PathBuf::from(r"C:\Example\Projects")],
                 repository: PathBuf::from(r"E:\Backups\Projects"),
@@ -247,6 +249,11 @@ pub fn preview() -> iced::Result {
                 app.wizard = Some(wizard);
                 app.page = Page::Plans;
             }
+            if std::env::args().any(|arg|arg=="--preview-remote") {
+                let mut wizard=Wizard::default();wizard.step=1;wizard.name="Online backup".into();
+                wizard.remote.provider=Provider::Ftp;wizard.remote.host="ftp.example.com".into();wizard.remote.user="demo".into();
+                app.wizard=Some(wizard);app.page=Page::Plans;
+            }
             (app, Task::none())
         },
         |app: &mut App, message| {
@@ -263,7 +270,8 @@ pub fn preview() -> iced::Result {
                     | Message::EditExclusion(_) | Message::CancelExclusion | Message::SaveExclusion
                     | Message::RemoveExclusion(_) | Message::Name(_) | Message::Mode(_) | Message::Frequency(_)
                     | Message::Day(_) | Message::Time(_) | Message::Interval(_) | Message::KeepAll(_) | Message::UseVss(_)
-                    | Message::KeepCount(_) | Message::AskInstallUpdate | Message::LaterUpdate) => { return app.update(message); }
+                    | Message::KeepCount(_) | Message::AskInstallUpdate | Message::LaterUpdate
+                    | Message::RemoteProvider(_) | Message::RemoteField(_,_) | Message::RemoteTls(_)) => { return app.update(message); }
                 _ => {}
             }
             Task::none()
@@ -367,6 +375,13 @@ impl std::fmt::Display for Day {
 }
 #[derive(Debug, Clone)]
 enum Message {
+    RemoteProvider(Provider),
+    RemoteField(u8, String),
+    RemoteTls(bool),
+    ConnectRemote,
+    RemoteConnected(Result<remote::Credentials, String>),
+    TestRemote,
+    RemoteTested(Result<Response, String>),
     #[cfg(any(debug_assertions, feature = "ui-preview"))]
     ProbeFrame(std::time::Instant),
     DownloadUpdate,
@@ -441,6 +456,12 @@ enum Message {
 }
 
 struct Wizard {
+    remote: remote::Destination,
+    remote_credentials: remote::Credentials,
+    remote_credentials_changed: bool,
+    remote_notice: String,
+    remote_port: String,
+    remote_bandwidth: String,
     keep_all: bool,
     use_vss: bool,
     keep_count: String,
@@ -467,6 +488,12 @@ struct Wizard {
 impl Default for Wizard {
     fn default() -> Self {
         Self {
+            remote: remote::Destination::default(),
+            remote_credentials: remote::Credentials::default(),
+            remote_credentials_changed: false,
+            remote_notice: String::new(),
+            remote_port: "21".into(),
+            remote_bandwidth: "10240".into(),
             keep_all: true,
             use_vss: false,
             keep_count: "7".into(),
@@ -501,6 +528,9 @@ impl Drop for Wizard {
 impl Wizard {
     fn from_plan(p: &Plan) -> Self {
         let mut w = Self::default();
+        w.remote = p.remote.clone().unwrap_or_default();
+        w.remote_port = w.remote.port.to_string();
+        w.remote_bandwidth = w.remote.bandwidth_kib.to_string();
         w.mode = p.mode;
         w.use_vss = p.use_vss;
         w.keep_all = p.keep_last.is_none();
@@ -625,6 +655,14 @@ impl Wizard {
         Ok(s)
     }
     fn validate_step(&self) -> Result<(), String> {
+        if self.step == 1 && self.remote.provider != Provider::Local {
+            self.remote.validate().map_err(|e| e.to_string())?;
+            if self.editing.is_none() || self.remote_credentials_changed {
+                self.remote_credentials
+                    .validate(self.remote.provider)
+                    .map_err(|e| e.to_string())?;
+            }
+        }
         match self.step {
             0 if self.name.trim().is_empty() || self.sources.is_empty() => {
                 Err("Dă un nume planului și alege cel puțin o sursă.".into())
@@ -634,7 +672,7 @@ impl Wizard {
             }
             0 => straja::exclusions::validate_paths(&self.sources, &self.excluded_paths)
                 .map_err(|e| e.to_string()),
-            1 if self.repository.is_none() => {
+            1 if self.remote.provider==Provider::Local && self.repository.is_none() => {
                 Err("Alege folderul în care se vor salva copiile.".into())
             }
             1 if self.mode == BackupMode::Encrypted
@@ -650,6 +688,7 @@ impl Wizard {
                 Err("Cele două parole nu coincid.".into())
             }
             1 => {
+                if self.remote.provider!=Provider::Local {return Ok(())}
                 let repo = self.repository.as_ref().unwrap();
                 if self.editing.is_some()
                     && self.original_repository.as_ref() == Some(repo)
@@ -850,6 +889,127 @@ impl App {
                     self.update_error = Some(error);
                 }
             },
+            Message::RemoteProvider(provider) => {
+                if self.busy {
+                    return Task::none();
+                }
+                if let Some(w) = &mut self.wizard
+                    && w.editing.is_none()
+                {
+                    w.remote.provider = provider;
+                    w.remote_credentials = Default::default();
+                    w.remote_credentials_changed = false;
+                    w.remote_notice.clear();
+                    if provider != Provider::Local {
+                        w.mode = BackupMode::Encrypted;
+                    }
+                }
+            }
+            Message::RemoteField(field, value) => {
+                if let Some(w) = &mut self.wizard {
+                    w.remote_notice.clear();
+                    match field {
+                        0 => w.remote.host = value,
+                        1 => {
+                            w.remote.port = value.parse().unwrap_or(0);
+                            w.remote_port = value;
+                        }
+                        2 => w.remote.user = value,
+                        3 => {
+                            w.remote_credentials.password = value;
+                            w.remote_credentials_changed = true;
+                        }
+                        4 => w.remote.bucket = value,
+                        5 => w.remote.region = value,
+                        6 => w.remote.path = value,
+                        7 => {
+                            w.remote_credentials.access_key = value;
+                            w.remote_credentials_changed = true;
+                        }
+                        8 => {
+                            w.remote_credentials.secret_key = value;
+                            w.remote_credentials_changed = true;
+                        }
+                        9 => {
+                            w.remote.bandwidth_kib = value.parse().unwrap_or(u32::MAX);
+                            w.remote_bandwidth = value;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            Message::RemoteTls(value) => {
+                if let Some(w) = &mut self.wizard {
+                    w.remote.ftp_tls = value;
+                }
+            }
+            Message::ConnectRemote => {
+                if self.busy {
+                    return Task::none();
+                }
+                if let Some(w) = &mut self.wizard {
+                    let provider = w.remote.provider;
+                    w.remote_notice = tr("Termină autentificarea în browser (maximum 3 minute).");
+                    self.busy = true;
+                    return Task::perform(
+                        async move { remote::authorize(provider).await.map_err(|e| e.to_string()) },
+                        Message::RemoteConnected,
+                    );
+                }
+            }
+            Message::RemoteConnected(result) => {
+                self.busy = false;
+                if let Some(w) = &mut self.wizard {
+                    match result {
+                        Ok(credentials) => {
+                            w.remote_credentials = credentials;
+                            w.remote_credentials_changed = true;
+                            w.remote_notice = tr("Cont conectat.");
+                            w.error.clear();
+                        }
+                        Err(e) => {
+                            w.error = e;
+                            w.remote_notice.clear();
+                        }
+                    }
+                }
+            }
+            Message::TestRemote => {
+                if !self.available() {
+                    return Task::none();
+                }
+                if let Some(w) = &mut self.wizard {
+                    if let Err(e) = w.remote.validate() {
+                        w.error = e.to_string();
+                        return Task::none();
+                    }
+                    let credentials = (w.editing.is_none() || w.remote_credentials_changed)
+                        .then(|| w.remote_credentials.clone());
+                    let request = Request::TestRemote {
+                        destination: w.remote.clone(),
+                        credentials,
+                        plan: w.editing.clone(),
+                    };
+                    self.busy = true;
+                    w.remote_notice = tr("Testez conexiunea…");
+                    w.error.clear();
+                    return Task::perform(
+                        async move { protocol::call(request).await.map_err(|e| e.to_string()) },
+                        Message::RemoteTested,
+                    );
+                }
+            }
+            Message::RemoteTested(result) => {
+                self.busy = false;
+                if let Some(w) = &mut self.wizard {
+                    w.remote_notice.clear();
+                    match result {
+                        Ok(Response::Ok(s)) => w.remote_notice = tr(s),
+                        Ok(Response::Error(e)) | Err(e) => w.error = e,
+                        _ => w.error = tr("Conexiunea online a eșuat."),
+                    }
+                }
+            }
             Message::CheckUpdates => {
                 if !self.update_checking
                     && self.download_progress.is_none()
@@ -1430,7 +1590,11 @@ impl App {
                         return Task::none();
                     }
                 };
-                let Some(repository) = w.repository.clone() else {
+                let Some(repository) = w
+                    .repository
+                    .clone()
+                    .or_else(|| (w.remote.provider != Provider::Local).then(PathBuf::new))
+                else {
                     return Task::none();
                 };
                 let keep_last = match w.retention() {
@@ -1441,6 +1605,10 @@ impl App {
                     }
                 };
                 let changes = PlanChanges {
+                    remote: (w.remote.provider != Provider::Local).then(|| w.remote.clone()),
+                    remote_credentials: (w.remote.provider != Provider::Local
+                        && (w.editing.is_none() || w.remote_credentials_changed))
+                        .then(|| w.remote_credentials.clone()),
                     keep_last,
                     use_vss: w.use_vss,
                     name: w.name.clone(),
@@ -1463,6 +1631,8 @@ impl App {
                     }
                 } else {
                     Request::Add(NewPlan {
+                        remote: changes.remote,
+                        remote_credentials: changes.remote_credentials,
                         mode: w.mode,
                         name: changes.name,
                         sources: changes.sources,
@@ -2000,7 +2170,7 @@ impl App {
                 source_cell,
                 column![
                     text("DESTINAȚIE").size(11).color(MUTED),
-                    compact_path(p.repository.display().to_string())
+                    compact_path(p.destination_label())
                 ]
                 .spacing(4)
                 .width(Fill),
@@ -2104,7 +2274,7 @@ impl App {
                     .size(13)
                     .color(MUTED),
                 )
-                .push(text(format!("DESTINAȚIE: {}", p.repository.display())).size(14))
+                .push(text(format!("DESTINAȚIE: {}", p.destination_label())).size(14))
                 .push(
                     container(
                         scrollable(sources)
@@ -2122,6 +2292,16 @@ impl App {
                     ]
                     .spacing(4),
                 );
+            if let Some(remote) = &p.remote
+                && let Ok(path) = remote.root(&p.id)
+            {
+                body = body.push(text(path.clone()).size(13));
+                body = body.push(
+                    button(text("Copiază calea"))
+                        .style(button::text)
+                        .on_press(Message::CopyText(path)),
+                );
+            }
             if let Some(run) = latest {
                 body = body.push(
                     column![
@@ -2178,7 +2358,7 @@ impl App {
                 horizontal_rule(1),
                 text(format!("Ștergi planul «{}»?", p.name)).size(19),
                 text("Se elimină planul, programarea și parola salvată în aplicație. Istoricul, fișierele sursă și copiile de pe disc rămân intacte.").size(14),
-                text(format!("Copiile rămân în: {}", p.repository.display())).size(14),
+                text(format!("Copiile rămân în: {}", p.destination_label())).size(14),
                 text("După ștergere, planul nu mai apare la Restaurare. Importul planurilor șterse nu este disponibil.").size(14),
             ].spacing(12);
             if p.mode == BackupMode::Encrypted {
@@ -2449,6 +2629,107 @@ impl App {
             text("Numărul de copii păstrate se configurează în fiecare plan. Copiile vechi se elimină numai după un backup nou reușit și verificat. ZIP, TAR.GZ și 7z sunt arhive necriptate. Restaurarea recuperează întreaga copie selectată. Fișierele blocate sunt raportate; VSS nu este activat în această versiune.").size(14),
         ].spacing(18))
     }
+    fn remote_form<'a>(&'a self, w: &'a Wizard) -> Element<'a, Message> {
+        let input = |label: &str, value: &str, field: u8, secret: bool, editable: bool| {
+            text_input(&tr(label), value)
+                .secure(secret)
+                .padding(10)
+                .on_input_maybe(
+                    (editable && !self.busy)
+                        .then_some(move |value| Message::RemoteField(field, value)),
+                )
+        };
+        let editable = w.editing.is_none();
+        let mut body =
+            column![text("Destinațiile online folosesc backup criptat și incremental.").size(14)]
+                .spacing(12);
+        match w.remote.provider {
+            Provider::Ftp => {
+                body = body
+                    .push(
+                        row![
+                            input("Server FTP", &w.remote.host, 0, false, editable),
+                            input("Port", &w.remote_port, 1, false, editable)
+                        ]
+                        .spacing(12),
+                    )
+                    .push(input("Utilizator FTP", &w.remote.user, 2, false, editable))
+                    .push(input(
+                        "Parolă FTP",
+                        &w.remote_credentials.password,
+                        3,
+                        true,
+                        true,
+                    ))
+                    .push(
+                        checkbox(w.remote.ftp_tls)
+                            .label(tr("FTPS explicit (TLS)"))
+                            .on_toggle_maybe(
+                                (editable && !self.busy).then_some(Message::RemoteTls),
+                            ),
+                    );
+                if !w.remote.ftp_tls {
+                    body=body.push(text("FTP fără TLS transmite autentificarea fără criptare. Folosește FTPS dacă serverul permite.").size(13));
+                }
+            }
+            Provider::S3 => {
+                body = body
+                    .push(input(
+                        "Bucket Amazon S3 existent",
+                        &w.remote.bucket,
+                        4,
+                        false,
+                        editable,
+                    ))
+                    .push(input(
+                        "Regiune AWS (de exemplu eu-central-1)",
+                        &w.remote.region,
+                        5,
+                        false,
+                        editable,
+                    ))
+                    .push(input(
+                        "Access Key ID",
+                        &w.remote_credentials.access_key,
+                        7,
+                        true,
+                        true,
+                    ))
+                    .push(input(
+                        "Secret Access Key",
+                        &w.remote_credentials.secret_key,
+                        8,
+                        true,
+                        true,
+                    ));
+            }
+            Provider::GoogleDrive | Provider::Dropbox => {
+                body = body.push(
+                    button(text("Conectează contul în browser"))
+                        .on_press_maybe((!self.busy).then_some(Message::ConnectRemote)),
+                );
+                if w.remote_credentials_changed {
+                    body = body.push(text("Cont conectat."));
+                }
+            }
+            Provider::Local => {}
+        }
+        body=body.push(input("Folder online (de exemplu StrajaBackup)",&w.remote.path,6,false,editable))
+            .push(text("Fiecare plan folosește un subfolder propriu. Parola backupului este separată de autentificarea contului.").size(13))
+            .push(text("Limită transfer KiB/s (0 = fără limită)").size(14))
+            .push(input("KiB/s",&w.remote_bandwidth,9,false,true));
+        if !editable {
+            body=body.push(text("Lasă autentificarea necompletată pentru a păstra datele salvate. Pentru altă destinație creează un plan nou.").size(13));
+        }
+        body = body.push(
+            button(text("Testează conexiunea"))
+                .on_press_maybe(self.available().then_some(Message::TestRemote)),
+        );
+        if !w.remote_notice.is_empty() {
+            body = body.push(text(&w.remote_notice).size(14));
+        }
+        body.into()
+    }
     fn wizard_view<'a>(&'a self, w: &'a Wizard) -> Element<'a, Message> {
         let steps = ["Ce salvezi", "Unde salvezi", "Când", "Confirmare"];
         let mut content = column![
@@ -2548,46 +2829,77 @@ impl App {
                     );
             }
             1 => {
+                content = content.push(text("Destinația backupului").size(20));
                 if w.editing.is_none() {
-                    content = content
-                        .push(text("Cum păstrezi copiile?").size(20))
-                        .push(pick_list(
-                            [
-                                BackupMode::Encrypted,
-                                BackupMode::Plain,
-                                BackupMode::Zip,
-                                BackupMode::TarGz,
-                                BackupMode::SevenZip,
-                            ],
-                            Some(w.mode),
-                            Message::Mode,
-                        ));
+                    content = content.push(pick_list(
+                        Provider::ALL,
+                        Some(w.remote.provider),
+                        Message::RemoteProvider,
+                    ));
                 } else {
-                    content = content.push(text(format!("Mod: {}", w.mode)).size(16));
+                    content = content.push(text(w.remote.provider.to_string()));
                 }
-                if w.mode != BackupMode::Encrypted {
-                    content = content.push(text(if w.mode == BackupMode::Plain { "Fișiere normale, fără parolă. Le poți deschide și copia direct din Explorer. Fiecare rulare creează o copie completă într-un folder datat." } else { "Arhivă comprimată, fără parolă, pentru fiecare rulare. O poți deschide sau extrage cu un program compatibil, fără Straja. Compresia folosește temporar și spațiu pentru o copie completă necomprimată pe destinație." }).size(15))
+                if w.remote.provider != Provider::Local {
+                    content = content.push(self.remote_form(w));
+                    if w.editing.is_none() {
+                        content = content
+                            .push(text("Parola depozitului criptat").size(16))
+                            .push(
+                                text_input(&tr("Minimum 8 caractere"), &w.password)
+                                    .secure(true)
+                                    .on_input(Message::Password)
+                                    .padding(12),
+                            )
+                            .push(
+                                text_input(&tr("Repetă parola"), &w.confirm_password)
+                                    .secure(true)
+                                    .on_input(Message::ConfirmPassword)
+                                    .padding(12),
+                            );
+                    }
+                } else {
+                    if w.editing.is_none() {
+                        content =
+                            content
+                                .push(text("Cum păstrezi copiile?").size(20))
+                                .push(pick_list(
+                                    [
+                                        BackupMode::Encrypted,
+                                        BackupMode::Plain,
+                                        BackupMode::Zip,
+                                        BackupMode::TarGz,
+                                        BackupMode::SevenZip,
+                                    ],
+                                    Some(w.mode),
+                                    Message::Mode,
+                                ));
+                    } else {
+                        content = content.push(text(format!("Mod: {}", w.mode)).size(16));
+                    }
+                    if w.mode != BackupMode::Encrypted {
+                        content = content.push(text(if w.mode == BackupMode::Plain { "Fișiere normale, fără parolă. Le poți deschide și copia direct din Explorer. Fiecare rulare creează o copie completă într-un folder datat." } else { "Arhivă comprimată, fără parolă, pentru fiecare rulare. O poți deschide sau extrage cu un program compatibil, fără Straja. Compresia folosește temporar și spațiu pentru o copie completă necomprimată pe destinație." }).size(15))
                         .push(text("Oricine are acces la discul de backup poate citi aceste fișiere.").size(13).color(MUTED))
                         .push(button(text("Alege destinația…")).on_press(Message::BrowseRepo))
                         .push(text(w.repository.as_ref().map(|p| p.display().to_string()).unwrap_or("Alege un folder gol dedicat planului.".into())).size(14));
-                } else {
-                    if w.editing.is_some() {
-                        content = content.push(text("Destinația planului").size(20))
+                    } else {
+                        if w.editing.is_some() {
+                            content = content.push(text("Destinația planului").size(20))
                         .push(text(w.repository.as_ref().map(|p| p.display().to_string()).unwrap_or_default()))
                         .push(button(text("Alege altă destinație…")).on_press(Message::BrowseRepo))
                         .push(text("Poți corecta destinația înainte de inițializarea primului backup. După inițializare, creează un plan nou pentru alt depozit. Parola existentă se păstrează, fără să fie afișată.").size(14).color(MUTED));
-                    } else {
-                        content = content.push(text("Alege un folder gol dedicat acestui plan, pe discul de backup sau în rețea.").size(16))
+                        } else {
+                            content = content.push(text("Alege un folder gol dedicat acestui plan, pe discul de backup sau în rețea.").size(16))
                     .push(button(text("Alege destinația…")).on_press(Message::BrowseRepo))
                     .push(text(w.repository.as_ref().map(|p| p.display().to_string()).unwrap_or("Nicio destinație selectată".into())).size(14))
                     .push(text("Parola depozitului criptat").size(16))
                     .push(text_input(&tr("Minimum 8 caractere"), &w.password).secure(true).on_input(Message::Password).padding(12))
                     .push(text_input(&tr("Repetă parola"), &w.confirm_password).secure(true).on_input(Message::ConfirmPassword).padding(12))
                     .push(text("Păstrează parola și în afara acestui PC. Aplicația o salvează protejat pentru rulările automate.").size(13).color(MUTED));
+                        }
                     }
-                }
-                if w.editing.is_some() {
-                    content = content.push(text("Pentru schimbarea formatului de backup, creează un plan nou. Copiile existente rămân în formatul inițial.").size(13).color(MUTED));
+                    if w.editing.is_some() {
+                        content = content.push(text("Pentru schimbarea formatului de backup, creează un plan nou. Copiile existente rămân în formatul inițial.").size(13).color(MUTED));
+                    }
                 }
             }
             2 => {
@@ -2665,10 +2977,14 @@ impl App {
                     .push(text(format!("{} surse selectate", w.sources.len())))
                     .push(text(format!(
                         "Destinație: {}",
-                        w.repository
-                            .as_ref()
-                            .map(|p| p.display().to_string())
-                            .unwrap_or_default()
+                        if w.remote.provider != Provider::Local {
+                            w.remote.label()
+                        } else {
+                            w.repository
+                                .as_ref()
+                                .map(|p| p.display().to_string())
+                                .unwrap_or_default()
+                        }
                     )))
                     .push(text(format!(
                         "Program: {}",
@@ -2829,12 +3145,38 @@ fn surface(_theme: &Theme) -> container::Style {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn online_wizard_keeps_numeric_edits_and_requires_separate_credentials() {
+        let (mut app, _) = App::new();
+        app.wizard = Some(Wizard::default());
+        let _ = app.update(Message::RemoteProvider(Provider::Ftp));
+        let _ = app.update(Message::RemoteField(1, String::new()));
+        assert_eq!(app.wizard.as_ref().unwrap().remote_port, "");
+        assert_eq!(app.wizard.as_ref().unwrap().remote.port, 0);
+        let _ = app.update(Message::RemoteField(1, "2121".into()));
+        let _ = app.update(Message::RemoteField(9, "512".into()));
+        let w = app.wizard.as_mut().unwrap();
+        w.step = 1;
+        w.remote.host = "ftp.example.com".into();
+        w.remote.user = "user".into();
+        assert!(w.validate_step().is_err());
+        w.remote_credentials.password = "provider-password".into();
+        assert!(w.validate_step().is_err());
+        w.password = "backup-password".into();
+        w.confirm_password = w.password.clone();
+        assert!(w.validate_step().is_ok());
+        assert_eq!(w.remote.bandwidth_kib, 512);
+        w.remote_bandwidth = String::new();
+        w.remote.bandwidth_kib = u32::MAX;
+        assert!(w.validate_step().is_err());
+    }
     use super::*;
     #[test]
     fn compact_plan_status_and_read_only_details_survive_refresh() {
         let (mut app, _) = App::new();
         let mut run = failed_backup(r"C:\Example\cache");
         let mut plan = Plan {
+            remote: None,
             id: run.plan_id.clone(),
             name: "Example".into(),
             mode: BackupMode::Plain,
@@ -3044,6 +3386,7 @@ mod tests {
         let run = failed_backup(path);
         app.state.history.push(run.clone());
         let plan = Plan {
+            remote: None,
             mode: BackupMode::Plain,
             id: run.plan_id.clone(),
             name: run.plan_name.clone(),
@@ -3147,6 +3490,7 @@ mod tests {
         app.connected = true;
         app.state.agent_version = env!("CARGO_PKG_VERSION").into();
         let plan = Plan {
+            remote: None,
             mode: BackupMode::Encrypted,
             id: "delete-test".into(),
             name: "Test".into(),
@@ -3241,6 +3585,7 @@ mod tests {
     #[test]
     fn edit_form_keeps_schedule_and_does_not_require_or_expose_password() {
         let p = Plan {
+            remote: None,
             mode: BackupMode::Encrypted,
             id: "plan".into(),
             name: "Test".into(),
