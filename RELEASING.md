@@ -13,7 +13,7 @@ From 0.5.0, a notification offers **Download update**, then **Close and install*
 
 In-app installation requires `StrajaBackup-X.Y.Z-windows-x64-setup.exe`, an uploaded asset of 1–256 MiB, and a GitHub `digest` of `sha256:<64 hex digits>`. The digest is obtained from the public release API over HTTPS, not from an adjacent checksum file or release notes. Redirects are restricted to GitHub and its release asset hosts. A portable-only release can be discovered but cannot be installed automatically. SHA-256 validates integrity; the binaries are not yet code-signed.
 
-The tray and service do not independently check for updates; open the interface to see notifications. Installed versions up to 0.4.2 need one manual upgrade to gain in-app installation. Release notes appear in About as plain text in the publisher's language. Installer/runtime failure recovery and service/UAC flows must be validated on disposable Windows installations before public distribution.
+The tray and service do not independently check for updates; open the interface to see notifications. Installed versions up to 0.4.2 need one manual upgrade to gain in-app installation. Release notes appear in About as plain text in the publisher's language. Automatic checks use the 24-hour cache, so publication is not an instant push notification; a manual check bypasses that cache. Validate installer/runtime recovery and service/UAC flows on disposable Windows installations and disclose untested paths in release notes.
 
 ## Prepare a version
 
@@ -26,10 +26,15 @@ The tray and service do not independently check for updates; open the interface 
 
 ```powershell
 .\scripts\prepare-release.ps1 -NotesFile .\release-notes.txt
+# Only for an explicitly requested review build: add -DraftOnly.
 # Only for a deliberately portable-only preview: add -PortableOnly (no in-app installation).
 ```
 
-This creates a **draft** with checksum-verified portable and installer assets and checks the uploaded installer digest returned by GitHub. Review the draft and publish it as a stable release, marking it **Latest** in GitHub. Publishing, rather than merely uploading a file to the website, makes it discoverable by installed clients. Use a prerelease for builds that should not be offered through the stable channel. Never replace assets under an existing published tag; issue a new version.
+By default this uploads a temporary draft, verifies its installer digest, then calls `scripts/publish-release.ps1` to publish **Stable / Latest** and verify the anonymous `/releases/latest` endpoint used by installed clients. It checks all four uploaded assets against local hashes and sizes, validates final download URLs, and refuses to make an older version Latest. A failed check is not a completed launch. `-DraftOnly` and `-PortableOnly` leave an explicitly requested draft invisible to installed clients. Never replace assets under an existing published tag; issue a new version.
+
+To finish an already uploaded draft (or verify an already published release without replacing it), use `scripts/publish-release.ps1 -Version X.Y.Z`. Keep the matching local artifacts and checksum sidecars available. If public verification fails after publication, inspect the existing release and retry verification; do not recreate or overwrite its assets.
+
+The project owner requested on 2026-10-19 that launching a new version includes GitHub publication and automatic in-app discovery. Do not describe a local installer or draft as a launched update. After publishing, run the ignored `updates::tests::live_public_repository_and_release_api` test with `STRAJA_UPDATE_TEST_INSTALLED` set to an older installed version to exercise the actual Rust discovery logic without changing user settings.
 
 The draft helper validates tag/HEAD, a clean working tree and asset hashes. Build provenance, functional installer validation and signing remain release responsibilities; checksums alone do not prove publisher identity. Code signing is not configured yet.
 
@@ -41,4 +46,4 @@ GitHub API reference: https://docs.github.com/en/rest/releases/releases#get-the-
 
 ## Current validation status
 
-The earlier Inno runtime stall did not recur in the 0.5.0 isolated lifecycle tests. Installation, upgrade, uninstall, registration, locked-file protection and data preservation passed. A second run exercised the in-app installer arguments and read-sharing lock and confirmed preservation of the installation path and agent/tray startup tasks. The full GitHub download/helper/restart path, all-users elevation and an actual installed SCM service restart have not yet been exercised end to end. Keep publication gated on those disposable-machine checks and review of the actual release artifacts. See `VALIDATION.md`.
+The 0.6.2 isolated installer lifecycle and 74 Rust tests passed. Installation, upgrade, uninstall, registration, locked-file protection, updater installer arguments and data preservation were exercised. The full GitHub download/helper/restart path, all-users elevation and actual installed SCM service restart have not yet been exercised end to end. After these limitations were explained, the project owner directed stable publication and automatic discovery on 2026-10-19; the earlier draft-only publication hold is superseded. Keep the limitations visible and complete those disposable-machine checks in future validation. See `VALIDATION.md`.

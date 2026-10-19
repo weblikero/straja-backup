@@ -687,5 +687,19 @@ mod tests {
         assert_eq!(response.status(), reqwest::StatusCode::OK);
         let release = fetch(&client, API_URL).await.unwrap();
         evaluate(release.as_ref(), env!("CARGO_PKG_VERSION")).unwrap();
+        // Exercise discovery as an older installed client, without writing its cache.
+        if let Ok(installed) = std::env::var("STRAJA_UPDATE_TEST_INSTALLED") {
+            let update = evaluate(release.as_ref(), &installed)
+                .unwrap()
+                .expect("published release must be newer than the simulated client");
+            assert!(
+                update.installer.is_some(),
+                "in-app installer must be available"
+            );
+            println!(
+                "Client {installed} detects {} with a verified installer digest",
+                update.version
+            );
+        }
     }
 }

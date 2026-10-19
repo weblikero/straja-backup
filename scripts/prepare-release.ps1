@@ -1,4 +1,4 @@
-﻿param([Parameter(Mandatory=$true)][string]$NotesFile, [switch]$PortableOnly)
+﻿param([Parameter(Mandatory=$true)][string]$NotesFile, [switch]$PortableOnly, [switch]$DraftOnly)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
 Push-Location $projectRoot
@@ -48,5 +48,9 @@ try {
             throw 'GitHub installer size/digest mismatch or missing digest. Keep the release as a draft; in-app updates are unavailable.'
         }
     }
-    Write-Host 'Draft created. Review the files and notes on GitHub before publishing.'
+    if ($DraftOnly -or $PortableOnly) {
+        Write-Host 'Draft created. This version is NOT available to installed clients.'
+    } else {
+        & (Join-Path $PSScriptRoot 'publish-release.ps1') -Version $version
+    }
 } finally { Pop-Location }

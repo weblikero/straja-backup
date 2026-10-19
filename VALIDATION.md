@@ -1,5 +1,12 @@
 # Validare — 19 octombrie 2026
 
+### Stable publication and discovery — 0.6.2 (2026-10-19)
+
+- Following the project owner's instruction to publish launches to GitHub and notify installed clients, released `v0.6.2` as stable/Latest. The earlier draft publication hold is superseded; the untested UAC/SCM/full installer handoff paths remain disclosed in the release notes.
+- `scripts/publish-release.ps1` compared all four uploaded assets with local SHA-256 and size, published the existing draft, and verified final tagged URLs and stable/Latest metadata through the anonymous API endpoint used by clients. No release asset was replaced.
+- The live Rust discovery test simulated installed version `0.6.0` and detected `0.6.2` with an available installer and valid GitHub digest (`test-output/published-update-0.6.2.log`). It did not write the real update cache, install the update, or interact with plans/agents. The script and test do not claim a completed install/restart on the user's PC.
+- Normal release preparation now publishes and verifies discovery by default. Explicit `-DraftOnly`/`-PortableOnly` builds remain unpublished. The helper refuses missing/mismatched assets and older-than-Latest publication; retries verify the existing release without overwriting artifacts.
+
 ### Release preparation — 0.6.2 (2026-10-19)
 
 - Fresh `scripts/test.ps1` run passed 74 tests: 67 ordinary tests plus 7 explicitly enabled Restic/worker/exclusion integration tests (`test-output/release-suite-0.6.2.log`). Native elevated VSS and tray tests remain outside this run.
