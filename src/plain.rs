@@ -17,6 +17,9 @@ use tokio::{
 pub const MARKER: &str = ".straja-plain.json";
 pub(crate) const MANIFEST: &str = ".straja-manifest.json";
 pub(crate) const FILES: &str = "Fisiere";
+// Reuse across files and verification. Repeated 1 MiB zeroed allocations per
+// small file cause excessive page faults in Windows background processing mode.
+const IO_BUFFER_SIZE: usize = 256 * 1024;
 
 #[derive(Serialize, Deserialize)]
 struct Repository {
@@ -32,7 +35,7 @@ fn plain_mode() -> BackupMode {
 #[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct Manifest {
     #[serde(default = "plain_mode")]
-    mode: BackupMode,
+    pub(crate) mode: BackupMode,
     pub(crate) version: u32,
     pub(crate) plan_id: String,
     pub(crate) id: String,
@@ -47,6 +50,46 @@ pub(crate) struct Entry {
     pub(crate) size: u64,
     pub(crate) sha256: String,
     pub(crate) modified: DateTime<Utc>,
+}
+
+/// Conservative serialized-size budget, accumulated while scanning the sources.
+/// No second entry list or serialized JSON buffer is allocated for this estimate.
+struct ManifestBudget(crate::metadata::BudgetWriter<std::io::Sink>);
+impl ManifestBudget {
+    fn new(header: &Manifest, limit: u64) -> Result<Self> {
+        let mut writer = crate::metadata::BudgetWriter::new(std::io::sink(), limit);
+        serde_json::to_writer(&mut writer, header)?;
+        Ok(Self(writer))
+    }
+    fn add(&mut self, path: &Path, directory: bool, modified: DateTime<Utc>) -> Result<()> {
+        use std::io::Write;
+        #[derive(Serialize)]
+        struct Estimate<'a> {
+            path: &'a Path,
+            directory: bool,
+            size: u64,
+            sha256: &'a str,
+            modified: DateTime<Utc>,
+        }
+        let entry = Estimate {
+            path,
+            directory,
+            size: if directory { 0 } else { u64::MAX },
+            sha256: if directory {
+                ""
+            } else {
+                "0000000000000000000000000000000000000000000000000000000000000000"
+            },
+            modified,
+        };
+        (|| -> Result<()> {
+            serde_json::to_writer(&mut self.0, &entry)?;
+            // Comma plus margin for a different timestamp representation if a live
+            // file changes between scanning and copying. Sizes already use u64::MAX.
+            self.0.write_all(&[0; 33])?;
+            Ok(())
+        })().context("Prea multe metadate pentru o singură copie (maximum 512 MB). Împarte sursele în mai multe planuri.")
+    }
 }
 
 pub fn exclusions(patterns: &[String]) -> Result<GlobSet> {
@@ -83,40 +126,26 @@ pub(crate) fn not_link(meta: &std::fs::Metadata, path: &Path) -> Result<()> {
     Ok(())
 }
 
-async fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T> {
-    not_link(&fs::symlink_metadata(path).await?, path)?;
-    let mut file = fs::File::open(path).await?;
-    let mut bytes = Vec::new();
-    (&mut file)
-        .take(64 * 1024 * 1024 + 1)
-        .read_to_end(&mut bytes)
-        .await?;
-    ensure!(
-        bytes.len() <= 64 * 1024 * 1024,
-        "Metadatele copiei depășesc limita de 64 MB."
-    );
-    serde_json::from_slice(&bytes).context("Metadate de backup nevalide")
+async fn read_json<T: serde::de::DeserializeOwned + Send + 'static>(
+    path: &Path,
+    limit: u64,
+) -> Result<T> {
+    let path = path.to_owned();
+    tokio::task::spawn_blocking(move || crate::metadata::read(&path, limit)).await?
 }
-async fn write_json(path: &Path, value: &impl Serialize) -> Result<()> {
-    let bytes = serde_json::to_vec_pretty(value)?;
-    ensure!(
-        bytes.len() <= 64 * 1024 * 1024,
-        "Prea multe metadate pentru o singură copie (maximum 64 MB)."
-    );
-    let mut file = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(path)
-        .await?;
-    file.write_all(&bytes).await?;
-    file.sync_all().await?;
-    Ok(())
+async fn write_json<T: Serialize + Send + 'static>(path: &Path, value: T, limit: u64) -> Result<T> {
+    let path = path.to_owned();
+    tokio::task::spawn_blocking(move || {
+        crate::metadata::write(&path, &value, limit)?;
+        Ok(value)
+    })
+    .await?
 }
 async fn repository(plan: &Plan) -> Result<PathBuf> {
     let root = fs::canonicalize(&plan.repository)
         .await
         .context("Destinația nu este disponibilă")?;
-    let marker: Repository = read_json(&root.join(MARKER))
+    let marker: Repository = read_json(&root.join(MARKER), crate::metadata::REPOSITORY_LIMIT)
         .await
         .context("Folderul nu este o destinație de backup necriptat Straja")?;
     ensure!(
@@ -169,8 +198,14 @@ async fn manifest(plan: &Plan, id: &str) -> Result<(PathBuf, Manifest)> {
     ensure!(valid_id(id), "Identificator de copie nevalid.");
     let folder = repository(plan).await?.join(id);
     not_link(&fs::symlink_metadata(&folder).await?, &folder)?;
-    let m: Manifest = read_json(&folder.join(MANIFEST)).await?;
-    validate_manifest(&m, plan, id)?;
+    let path = folder.join(MANIFEST);
+    let (plan, id) = (plan.clone(), id.to_owned());
+    let m = tokio::task::spawn_blocking(move || {
+        let m = crate::metadata::read(&path, crate::metadata::MANIFEST_LIMIT)?;
+        validate_manifest(&m, &plan, &id)?;
+        Ok::<_, anyhow::Error>(m)
+    })
+    .await??;
     Ok((folder, m))
 }
 async fn checked_path(root: &Path, relative: &Path) -> Result<PathBuf> {
@@ -193,13 +228,12 @@ fn progress(engine: &Engine, files: u64, bytes: u64, total: u64, detail: String)
         p.detail = detail;
     }
 }
-async fn digest(path: &Path) -> Result<(String, u64)> {
+async fn digest(path: &Path, buffer: &mut [u8]) -> Result<(String, u64)> {
     let mut file = fs::File::open(path).await?;
     let mut hash = Sha256::new();
-    let mut buffer = vec![0; 1024 * 1024];
     let mut bytes = 0;
     loop {
-        let count = file.read(&mut buffer).await?;
+        let count = file.read(buffer).await?;
         if count == 0 {
             break;
         }
@@ -211,11 +245,12 @@ async fn digest(path: &Path) -> Result<(String, u64)> {
 async fn copy_file(
     engine: &Engine,
     from: &Path,
+    logical: &Path,
     to: &Path,
-    files_done: u64,
-    bytes_done: u64,
-    total: u64,
+    completed: (u64, u64, u64),
+    buffer: &mut [u8],
 ) -> Result<(String, u64, DateTime<Utc>)> {
+    let (files_done, bytes_done, total) = completed;
     use std::os::windows::fs::OpenOptionsExt;
     // Deny writers/deletion for this read and reject reparse points on the opened handle.
     let input = std::fs::OpenOptions::new()
@@ -226,11 +261,11 @@ async fn copy_file(
         .with_context(|| {
             format!(
                 "Fișierul nu poate fi citit (posibil blocat): {}",
-                from.display()
+                logical.display()
             )
         })?;
     let before = input.metadata()?;
-    not_link(&before, from)?;
+    not_link(&before, logical)?;
     let modified = before.modified()?;
     let mut input = fs::File::from_std(input);
     let mut output = fs::OpenOptions::new()
@@ -240,9 +275,8 @@ async fn copy_file(
         .await?;
     let mut hash = Sha256::new();
     let mut bytes = 0;
-    let mut buffer = vec![0; 1024 * 1024];
     loop {
-        let count = input.read(&mut buffer).await?;
+        let count = input.read(buffer).await?;
         if count == 0 {
             break;
         }
@@ -254,13 +288,13 @@ async fn copy_file(
             files_done,
             bytes_done + bytes,
             total,
-            format!("Copiez {}", from.display()),
+            format!("Copiez {}", logical.display()),
         );
     }
     ensure!(
         bytes == before.len() && input.metadata().await?.modified()? == modified,
         "Fișierul s-a modificat în timpul copierii: {}",
-        from.display()
+        logical.display()
     );
     // Release the source's read lock before flushing and verifying the destination.
     drop(input);
@@ -271,7 +305,7 @@ async fn copy_file(
     let expected = format!("{:x}", hash.finalize());
     engine.update(&format!("Verific copia: {}", to.display()));
     ensure!(
-        digest(to).await? == (expected.clone(), bytes),
+        digest(to, buffer).await? == (expected.clone(), bytes),
         "Verificarea fișierului copiat a eșuat: {}",
         to.display()
     );
@@ -294,6 +328,12 @@ pub async fn backup(engine: &Engine, plan: &Plan) -> Result<(String, String)> {
             "Sursa și destinația se suprapun."
         );
     }
+    let snapshots = if plan.use_vss {
+        engine.update("Creez snapshotul Windows VSS…");
+        Some(crate::vss::SnapshotSet::create(plan.sources.clone()).await?)
+    } else {
+        None
+    };
     if !root.join(MARKER).exists() {
         ensure!(
             plan.last_success.is_none(),
@@ -302,11 +342,12 @@ pub async fn backup(engine: &Engine, plan: &Plan) -> Result<(String, String)> {
         validate_empty_repository(&root)?;
         write_json(
             &root.join(MARKER),
-            &Repository {
+            Repository {
                 mode: plan.mode,
                 version: 1,
                 plan_id: plan.id.clone(),
             },
+            crate::metadata::REPOSITORY_LIMIT,
         )
         .await?;
     }
@@ -319,15 +360,28 @@ pub async fn backup(engine: &Engine, plan: &Plan) -> Result<(String, String)> {
     );
     let staging = root.join(format!(".in-progress-{id}"));
     fs::create_dir(&staging).await?;
-    let result = backup_into(engine, plan, &internal, &staging, &id, time).await;
-    result.with_context(|| {
+    let result = backup_into(
+        engine,
+        plan,
+        &internal,
+        &staging,
+        &id,
+        time,
+        snapshots.as_ref(),
+    )
+    .await;
+    // Release before archive compression, retaining a cleanup error and the partial copy.
+    let cleanup = match snapshots {
+        Some(set) => set.close().await,
+        None => Ok(()),
+    };
+    let m = result.and_then(|manifest| cleanup.map(|()| manifest)).with_context(|| {
         format!(
             "Backup nefinalizat. Copia parțială se află în {}; versiunile anterioare sunt intacte.",
             staging.display()
         )
     })?;
     if plan.mode.archive_name().is_some() {
-        let m: Manifest = read_json(&staging.join(MANIFEST)).await?;
         let m = crate::archive::create(engine, plan.mode, &staging, m)
             .await
             .with_context(|| {
@@ -366,9 +420,30 @@ async fn backup_into(
     staging: &Path,
     id: &str,
     time: DateTime<Utc>,
-) -> Result<()> {
+    snapshots: Option<&crate::vss::SnapshotSet>,
+) -> Result<Manifest> {
     let patterns = exclusions(&plan.excludes)?;
     let selected = crate::exclusions::PathMatcher::new(&plan.excluded_paths);
+    let internal_paths = crate::exclusions::PathMatcher::new(&[internal.to_path_buf()]);
+    let sources = plan
+        .sources
+        .iter()
+        .map(|p| {
+            p.to_str()
+                .map(String::from)
+                .context("Sursă cu nume Unicode nevalid")
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let mut m = Manifest {
+        mode: plan.mode,
+        version: 1,
+        plan_id: plan.id.clone(),
+        id: id.into(),
+        time,
+        sources,
+        entries: Vec::new(),
+    };
+    let mut budget = ManifestBudget::new(&m, crate::metadata::MANIFEST_LIMIT)?;
     engine.update("Scanez sursele pentru copia necriptată…");
     let mut stack = Vec::new();
     for (i, source) in plan.sources.iter().enumerate() {
@@ -397,17 +472,27 @@ async fn backup_into(
         {
             continue;
         }
-        let meta = fs::symlink_metadata(&source).await?;
+        let physical = match snapshots {
+            Some(set) => set.resolve(&source)?,
+            None => source.clone(),
+        };
+        let meta = fs::symlink_metadata(&physical)
+            .await
+            .with_context(|| format!("Sursa nu poate fi citită: {}", source.display()))?;
         not_link(&meta, &source)?;
-        let canonical = fs::canonicalize(&source).await?;
-        if canonical.starts_with(internal) {
+        let is_internal = if snapshots.is_some() {
+            internal_paths.contains(&source)
+        } else {
+            fs::canonicalize(&source).await?.starts_with(internal)
+        };
+        if is_internal {
             continue;
         }
         if meta.is_dir() {
-            let mut children = fs::read_dir(&source).await?;
+            let mut children = fs::read_dir(&physical).await?;
             while let Some(child) = children.next_entry().await? {
                 stack.push((
-                    child.path(),
+                    source.join(child.file_name()),
                     destination.join(child.file_name()),
                     base.clone(),
                 ));
@@ -417,11 +502,15 @@ async fn backup_into(
                 .checked_add(meta.len())
                 .context("Dimensiune prea mare")?;
         }
-        items.push((source, destination, meta.is_dir(), meta.modified()?));
+        let modified = meta.modified()?;
+        // Fail during enumeration, before copying any file, if metadata cannot fit.
+        budget.add(&destination, meta.is_dir(), modified.into())?;
+        items.push((source, destination, meta.is_dir(), modified));
     }
     fs::create_dir(staging.join(FILES)).await?;
     let mut entries = Vec::new();
     let (mut files, mut bytes) = (0, 0);
+    let mut buffer = vec![0; IO_BUFFER_SIZE];
     for (source, relative, directory, modified) in items {
         let target = staging.join(&relative);
         if directory {
@@ -435,8 +524,19 @@ async fn backup_into(
             });
         } else {
             fs::create_dir_all(target.parent().context("Folder lipsă")?).await?;
-            let (sha256, size, modified) =
-                copy_file(engine, &source, &target, files, bytes, total).await?;
+            let physical = match snapshots {
+                Some(set) => set.resolve(&source)?,
+                None => source.clone(),
+            };
+            let (sha256, size, modified) = copy_file(
+                engine,
+                &physical,
+                &source,
+                &target,
+                (files, bytes, total),
+                &mut buffer,
+            )
+            .await?;
             files += 1;
             bytes += size;
             entries.push(Entry {
@@ -455,27 +555,9 @@ async fn backup_into(
             );
         }
     }
-    let sources = plan
-        .sources
-        .iter()
-        .map(|p| {
-            p.to_str()
-                .map(String::from)
-                .context("Sursă cu nume Unicode nevalid")
-        })
-        .collect::<Result<Vec<_>>>()?;
-    let m = Manifest {
-        mode: plan.mode,
-        version: 1,
-        plan_id: plan.id.clone(),
-        id: id.into(),
-        time,
-        sources,
-        entries,
-    };
+    m.entries = entries;
     validate_manifest(&m, plan, id)?;
-    write_json(&staging.join(MANIFEST), &m).await?;
-    Ok(())
+    write_json(&staging.join(MANIFEST), m, crate::metadata::MANIFEST_LIMIT).await
 }
 
 pub async fn snapshots(plan: &Plan) -> Result<Vec<Snapshot>> {
@@ -499,13 +581,13 @@ pub async fn snapshots(plan: &Plan) -> Result<Vec<Snapshot>> {
     snapshots.sort_by_key(|s| std::cmp::Reverse(s.time));
     Ok(snapshots)
 }
-async fn verify_entry(root: &Path, entry: &Entry) -> Result<PathBuf> {
+async fn verify_entry(root: &Path, entry: &Entry, buffer: &mut [u8]) -> Result<PathBuf> {
     let path = checked_path(root, &entry.path).await?;
     if entry.directory {
         ensure!(path.is_dir(), "Folder lipsă: {}", path.display());
     } else {
         ensure!(
-            digest(&path).await? == (entry.sha256.clone(), entry.size),
+            digest(&path, buffer).await? == (entry.sha256.clone(), entry.size),
             "Fișier modificat sau corupt: {}",
             path.display()
         );
@@ -515,15 +597,17 @@ async fn verify_entry(root: &Path, entry: &Entry) -> Result<PathBuf> {
 pub async fn check(engine: &Engine, plan: &Plan) -> Result<(String, String)> {
     let copies = snapshots(plan).await?;
     ensure!(!copies.is_empty(), "Nu există încă un backup finalizat.");
+    let mut buffer = vec![0; IO_BUFFER_SIZE];
     for snapshot in &copies {
         let (folder, m) = manifest(plan, &snapshot.id).await?;
         if plan.mode.archive_name().is_some() {
-            crate::archive::verify(engine, plan.mode, &folder, m, None).await?;
+            crate::archive::verify(engine, plan.mode, &folder, std::sync::Arc::new(m), None)
+                .await?;
             continue;
         }
         for entry in &m.entries {
             engine.update(&format!("Verific {}", entry.path.display()));
-            verify_entry(&folder, entry).await?;
+            verify_entry(&folder, entry, &mut buffer).await?;
         }
     }
     Ok((
@@ -546,6 +630,7 @@ pub async fn restore(
         "Alege un folder de restaurare separat de depozit și datele aplicației."
     );
     if plan.mode.archive_name().is_some() {
+        let m = std::sync::Arc::new(m);
         crate::archive::verify(engine, plan.mode, &folder, m.clone(), None).await?;
         let staging = parent.join(format!(
             ".Straja-Restaurare-incompleta-{}",
@@ -563,8 +648,9 @@ pub async fn restore(
         ));
     }
     // Verify before creating a destination, including untrusted manifest paths.
+    let mut buffer = vec![0; IO_BUFFER_SIZE];
     for entry in &m.entries {
-        verify_entry(&folder, entry).await?;
+        verify_entry(&folder, entry, &mut buffer).await?;
     }
     let staging = parent.join(format!(
         ".Straja-Restaurare-incompleta-{}",
@@ -583,7 +669,15 @@ pub async fn restore(
             fs::create_dir_all(&target).await?;
         } else {
             fs::create_dir_all(target.parent().context("Folder lipsă")?).await?;
-            let (hash, size, _) = copy_file(engine, &source, &target, files, bytes, total).await?;
+            let (hash, size, _) = copy_file(
+                engine,
+                &source,
+                &source,
+                &target,
+                (files, bytes, total),
+                &mut buffer,
+            )
+            .await?;
             ensure!(
                 hash == entry.sha256 && size == entry.size,
                 "Copia s-a modificat în timpul restaurării."
@@ -686,4 +780,94 @@ pub async fn remove_snapshot(plan: &Plan, id: &str) -> Result<()> {
 pub async fn validate_removal(plan: &Plan, id: &str) -> Result<()> {
     let (folder, m) = manifest(plan, id).await?;
     remove_known_tree(&folder, &m, plan.mode, false, true).await
+}
+
+#[cfg(test)]
+mod metadata_tests {
+    use super::*;
+
+    fn header() -> Manifest {
+        Manifest {
+            mode: BackupMode::Plain,
+            version: 1,
+            plan_id: "large-plan".into(),
+            id: "Backup-large".into(),
+            time: Utc::now(),
+            sources: vec![r"C:\Source".into()],
+            entries: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn large_manifest_roundtrip_exceeds_old_limit() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join(MANIFEST);
+        let mut m = header();
+        let segment = "a".repeat(80);
+        let prefix = format!("Fisiere/{segment}/{segment}/{segment}/{segment}");
+        for i in 0..180_000 {
+            m.entries.push(Entry {
+                path: PathBuf::from(format!("{prefix}/file-{i:06}.txt")),
+                directory: false,
+                size: i,
+                sha256: "0".repeat(64),
+                modified: m.time,
+            });
+        }
+        crate::metadata::write(&path, &m, crate::metadata::MANIFEST_LIMIT)?;
+        assert!(std::fs::metadata(&path)?.len() > 64 * 1024 * 1024);
+        drop(m);
+        let loaded: Manifest = crate::metadata::read(&path, crate::metadata::MANIFEST_LIMIT)?;
+        assert_eq!(loaded.entries.len(), 180_000);
+        assert_eq!(loaded.entries.last().unwrap().size, 179_999);
+        let plan = Plan {
+            mode: BackupMode::Plain,
+            id: "large-plan".into(),
+            name: "test".into(),
+            sources: vec![],
+            repository: temp.path().into(),
+            excluded_paths: vec![],
+            excludes: vec![],
+            keep_last: None,
+            use_vss: false,
+            schedule: Schedule::Manual,
+            enabled: false,
+            next_due: None,
+            last_success: None,
+        };
+        validate_manifest(&loaded, &plan, "Backup-large")?;
+        Ok(())
+    }
+
+    #[test]
+    fn scan_budget_covers_escaped_paths_and_rejects_excess_early() -> Result<()> {
+        let mut m = header();
+        let mut budget = ManifestBudget::new(&m, crate::metadata::MANIFEST_LIMIT)?;
+        for (path, directory) in [(r"Fisiere\Grüße", true), (r"Fisiere\Grüße\雪.txt", false)] {
+            let path = PathBuf::from(path);
+            budget.add(&path, directory, m.time)?;
+            m.entries.push(Entry {
+                path,
+                directory,
+                size: if directory { 0 } else { 42 },
+                sha256: if directory {
+                    String::new()
+                } else {
+                    "f".repeat(64)
+                },
+                modified: m.time,
+            });
+        }
+        let mut actual =
+            crate::metadata::BudgetWriter::new(std::io::sink(), crate::metadata::MANIFEST_LIMIT);
+        serde_json::to_writer(&mut actual, &m)?;
+        assert!(actual.used() <= budget.0.used());
+        let mut small = ManifestBudget::new(&header(), 300)?;
+        assert!(
+            small
+                .add(Path::new("Fisiere/file.txt"), false, m.time)
+                .is_err()
+        );
+        Ok(())
+    }
 }

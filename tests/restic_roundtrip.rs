@@ -31,6 +31,7 @@ async fn real_backup_incremental_history_restore_and_integrity() -> Result<()> {
         excluded_paths: vec![],
         excludes: vec!["*.tmp".into()],
         keep_last: None,
+        use_vss: false,
         schedule: Schedule::Manual,
         password: "integration-test-only".into(),
     })?;
@@ -99,6 +100,7 @@ async fn real_backup_incremental_history_restore_and_integrity() -> Result<()> {
             excluded_paths: vec![],
             excludes: vec![],
             keep_last: None,
+            use_vss: false,
             schedule: Schedule::Manual,
             password: "wrong-test-key".into(),
         })?

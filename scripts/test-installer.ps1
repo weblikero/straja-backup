@@ -1,4 +1,4 @@
-﻿param([string]$Version = '0.5.3', [ValidateSet('english','german','spanish','portuguese','french','italian','romanian')][string]$Language = 'english')
+﻿param([string]$Version = '0.6.2', [ValidateSet('english','german','spanish','portuguese','french','italian','romanian')][string]$Language = 'english')
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
 $setup = Join-Path $projectRoot "dist\installer\StrajaBackup-$Version-windows-x64-test-setup.exe"

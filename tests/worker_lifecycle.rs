@@ -33,6 +33,7 @@ async fn update_handoff_drains_service_and_preserves_plans() -> Result<()> {
         excluded_paths: vec![],
         excludes: vec![],
         keep_last: None,
+        use_vss: false,
         schedule: Schedule::Manual,
         password: String::new(),
     })?;
@@ -131,6 +132,7 @@ async fn scheduled_and_manual_roundtrip(mode: BackupMode) -> Result<()> {
         excluded_paths: vec![],
         excludes: vec![],
         keep_last: None,
+        use_vss: false,
         schedule: Schedule::Daily {
             hour: 23,
             minute: 59,
@@ -294,6 +296,7 @@ async fn manual_failure_is_reported_and_plan_can_be_fixed_without_losing_passwor
         excluded_paths: vec![],
         excludes: vec![],
         keep_last: None,
+        use_vss: false,
         schedule: Schedule::Manual,
         password: "manual-test-password".into(),
     })?;
@@ -350,6 +353,7 @@ async fn manual_failure_is_reported_and_plan_can_be_fixed_without_losing_passwor
         excluded_paths: vec![],
         excludes: vec!["*.tmp".into()],
         keep_last: None,
+        use_vss: false,
         schedule: Schedule::Manual,
     };
     assert!(matches!(

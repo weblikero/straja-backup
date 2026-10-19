@@ -20,6 +20,7 @@ fn deleting_plan_preserves_files_history_other_plans_and_handles_offline_paths()
         excluded_paths: vec![],
         excludes: vec![],
         keep_last: None,
+        use_vss: false,
         schedule: Schedule::Interval { minutes: 60 },
         password: "test-secret-password".into(),
     };
@@ -185,6 +186,7 @@ fn secrets_and_schedules_survive_database_reopen() {
         excluded_paths: vec![],
         excludes: vec![],
         keep_last: None,
+        use_vss: false,
         schedule: Schedule::Interval { minutes: 60 },
         password: "test-only-password".into(),
     };
@@ -242,6 +244,7 @@ fn edits_preserve_secrets_identity_and_history_and_validate_destination() {
         excluded_paths: vec![],
         excludes: vec![],
         keep_last: None,
+        use_vss: false,
         schedule: Schedule::Manual,
         password: "test-password".into(),
     };
@@ -269,6 +272,7 @@ fn edits_preserve_secrets_identity_and_history_and_validate_destination() {
         excluded_paths: vec![],
         excludes: vec!["*.tmp".into()],
         keep_last: None,
+        use_vss: false,
         schedule: Schedule::Interval { minutes: 90 },
     };
     let edited = store.update(&plan.id, changes.clone()).unwrap();

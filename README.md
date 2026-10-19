@@ -2,15 +2,15 @@
 
 Open-source backup and restore for Windows, created by [Weblike PRO](https://weblike.ro/). Licensed under MIT. Product website: [strajabackup.com](https://strajabackup.com/).
 
-Version **0.5.3** is a preview for Windows x64 (Windows 10 version 1809 or later, including Windows 11). The desktop app and background agent are written in Rust. Encrypted backups use the bundled Restic 0.19.1. Ordinary files and ZIP, TAR.GZ and 7z archives do not require Restic or a separate archive utility.
+Version **0.6.2** is a preview for Windows x64 (Windows 10 version 1809 or later, including Windows 11). The desktop app and background agent are written in Rust. Encrypted backups use the bundled Restic 0.19.1. Ordinary files and ZIP, TAR.GZ and 7z archives do not require Restic or a separate archive utility.
 
 My plans uses compact cards with source/destination, frequency, latest status and next run. Exclusions are summarized as counts; **Details & actions** opens the full paths, exclusions, backup format, retention, diagnostics and secondary actions. Only one plan expands at a time. Details remain readable while a backup is running.
 
-The title bar displays the Straja icon and the running executable version, for example **Straja Backup — v0.5.3**.
+The title bar displays the Straja icon and the running executable version, for example **Straja Backup — v0.6.2**.
 
 ## Install or update
 
-Run `StrajaBackup-0.5.3-windows-x64-setup.exe`. All runtime components are included; installation needs no downloads. The installer offers English, German, Spanish, Portuguese (Portugal), French, Italian and Romanian. English is the initial default; a previous installer language may be remembered.
+Run `StrajaBackup-0.6.2-windows-x64-setup.exe`. The backup engines and archive libraries are included; the installer itself needs no downloads. MSVC builds require the [Microsoft Visual C++ v14 x64 runtime](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170), as did version 0.5.3. The installer offers English, German, Spanish, Portuguese (Portugal), French, Italian and Romanian. English is the initial default; a previous installer language may be remembered.
 
 Before updating, wait for backup/restore/verification operations to finish. Choose **Stop agent and tray icon** in the notification icon menu, then close the app. If using the Windows service, stop the service and close the tray icon separately. The installer refuses to overwrite running executables.
 
@@ -20,9 +20,13 @@ Uninstalling removes application files and shortcuts, while keeping plans, prote
 
 ## Portable ZIP and release validation
 
-A portable package, `StrajaBackup-0.5.3-windows-x64-portable.zip`, is also provided. Extract the whole archive to a writable folder and run `StrajaBackup\straja.exe`; keep the agent and Restic next to it. Close older instances first. It uses the same per-user plan database as the installed app and does not register a new Add/remove Programs entry.
+A portable package, `StrajaBackup-0.6.2-windows-x64-portable.zip`, is also provided. Extract the whole archive to a writable folder and run `StrajaBackup\straja.exe`; keep the agent and Restic next to it. Close older instances first. It uses the same per-user plan database as the installed app and does not register a new Add/remove Programs entry.
 
 For 0.5.0, 64 application tests passed, plus strict static checks. The isolated per-user installer passed installation, upgrade, uninstall, Windows registration, file-in-use rejection and data preservation. The invocation used by in-app updates also passed with the installer held under a read-sharing lock, retaining the existing folder and startup tasks. These checks do not constitute a complete published-release-to-restarted-app test. The live GitHub handoff, all-users UAC and actual Windows service restart still require end-to-end validation on disposable installations. See `VALIDATION.md`.
+
+## Files in use (Windows VSS)
+
+Enable **Back up files in use (Windows VSS)** in a plan, then use **Enable VSS agent** if administrator approval is needed. Existing plans keep their previous behavior. VSS supports fixed local NTFS sources in all five formats; it does not replace native database backups. See [VSS.md](VSS.md) for permissions, scheduling, cleanup and limitations.
 
 ## Resource use
 
@@ -65,6 +69,10 @@ The app can close while the agent continues working. Missed schedules run when t
 
 Unencrypted copies are verified with SHA-256. Archives are read back and verified before publication. Compression temporarily requires space for both the complete uncompressed copy and its archive, in addition to retained backups.
 
+Version 0.6.2 supports manifests up to 512 MiB for ordinary files and all three archive formats. JSON is written compactly and streamed through bounded buffers; archive metadata is compared by size and SHA-256. A conservative metadata-size check runs while scanning, before copying file data. Larger source sets need separate plans. Existing version-1 pretty JSON remains readable; manifests above 64 MiB require version 0.6.2 or later on the restoring PC. The parsed file index still uses memory proportional to the number and length of paths.
+
+If an older backup stopped at the 64 MB metadata limit, its `.in-progress-.../Fisiere` folder remains available for manual file recovery. It lacks the completed manifest and is not automatically resumed or promoted to a verified backup. Upgrade and start a new backup; no partial folder is deleted by this fix.
+
 Retention removes old copies only after a successful, verified new backup. A retention failure reports **Successful with warning** and keeps the new backup. Failed/incomplete backups do not trigger cleanup. Unknown files and incomplete versions are not silently deleted. Changing retention applies to the next backup, not immediately. Backup format cannot be changed in an existing plan; create a new plan and destination.
 
 ## Exclusions and failed backups
@@ -73,7 +81,7 @@ Exact excluded paths must be inside a source and cannot remove an entire source.
 
 Unencrypted backup modes reject links, junctions and reparse points rather than following them. For these errors, and known file-read errors, use **Copy path** or **Add to exclusions…** on the plan, completion message or History. The latter opens an editable draft; save the exclusion and then the plan to apply it. **Copy message** is available for other errors. Historical errors from previous versions are supported too.
 
-If you exclude a junction, include its real target separately when you need its contents. An `.in-progress-...` folder is an incomplete copy, not a successful backup. Previous completed copies stay intact. Locked source files are reported; this version does not use VSS.
+If you exclude a junction, include its real target separately when you need its contents. An `.in-progress-...` folder is an incomplete copy, not a successful backup. Previous completed copies stay intact. Locked source files are reported when VSS is disabled. Enable VSS on supported local sources to read files in use.
 
 ## Restore, verify and delete plans
 
@@ -100,6 +108,6 @@ A debug build supports `straja.exe --preview` (or `--preview-updates --preview-u
 
 ## Scope
 
-This preview supports local and accessible network folders. It does not yet provide cloud-provider integrations, VSS, backup of NTFS ACLs/alternate data streams, automatic junction traversal, format conversion, or selective restore through the app. Use the original source files for production work, and periodically test recovery from your backups.
+This preview supports local and accessible network folders. It does not yet provide cloud-provider integrations, backup of NTFS ACLs/alternate data streams, automatic junction traversal, format conversion, or selective restore through the app. Use the original source files for production work, and periodically test recovery from your backups.
 
 The earlier Romanian guide is available as `README.ro.md`.

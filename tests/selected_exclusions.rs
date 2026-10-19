@@ -82,6 +82,7 @@ async fn exercise(mode: BackupMode) -> Result<()> {
         excluded_paths: vec![excluded_folder.clone(), excluded_file.clone()],
         excludes: vec!["*.tmp".into()],
         keep_last: None,
+        use_vss: false,
         schedule: Schedule::Manual,
         password: "test-password-only".into(),
     })?;
@@ -148,6 +149,7 @@ async fn exercise(mode: BackupMode) -> Result<()> {
             excluded_paths: vec![],
             excludes: plan.excludes.clone(),
             keep_last: None,
+            use_vss: false,
             schedule: plan.schedule.clone(),
         },
     )?;

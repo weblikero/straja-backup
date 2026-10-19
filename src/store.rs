@@ -75,6 +75,7 @@ impl Store {
             excludes: draft.excludes,
             next_due: draft.schedule.next_after(Utc::now()),
             keep_last: draft.keep_last,
+            use_vss: draft.use_vss,
             schedule: draft.schedule,
             enabled: true,
             last_success: None,
@@ -121,6 +122,7 @@ impl Store {
         plan.excluded_paths = changes.excluded_paths;
         plan.schedule = changes.schedule;
         plan.keep_last = changes.keep_last;
+        plan.use_vss = changes.use_vss;
         // Keep the same ID, encrypted password, history and enabled state.
         self.save(&plan)?;
         Ok(plan)

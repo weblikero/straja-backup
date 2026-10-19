@@ -1,5 +1,5 @@
 ﻿#ifndef AppVersion
-  #define AppVersion "0.5.3"
+  #define AppVersion "0.6.2"
 #endif
 #ifdef InstallerTest
   #define ProductName "Straja Backup Installer Test"
@@ -205,6 +205,7 @@ Source: "..\dist\StrajaBackup\straja-agent.exe"; DestDir: "{app}"; Flags: ignore
 Source: "..\dist\StrajaBackup\restic.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "assets\straja.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\VSS.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.ro.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\THIRD-PARTY-NOTICES.txt"; DestDir: "{app}"; Flags: ignoreversion

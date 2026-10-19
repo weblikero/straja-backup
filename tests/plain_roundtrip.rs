@@ -42,6 +42,7 @@ fn fixture() -> Result<Fixture> {
         excluded_paths: vec![],
         excludes: vec!["*.tmp".into(), "cache".into()],
         keep_last: None,
+        use_vss: false,
         schedule: Schedule::Manual,
         password: String::new(),
     })?;
@@ -99,6 +100,7 @@ async fn readable_versions_restore_exclusions_and_edit_without_password() -> Res
         excluded_paths: vec![],
         excludes: f.plan.excludes.clone(),
         keep_last: None,
+        use_vss: false,
         schedule: Schedule::Interval { minutes: 90 },
     };
     let edited = f.engine.store.update(&f.plan.id, changes.clone())?;
@@ -142,6 +144,37 @@ async fn readable_versions_restore_exclusions_and_edit_without_password() -> Res
         1,
         "Corrupt backups must not be restored"
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn mixed_file_sizes_survive_reused_buffers_and_restore() -> Result<()> {
+    let f = fixture()?;
+    let mut expected = Vec::new();
+    // Cross the I/O chunk boundary, then alternate short and empty files. This
+    // catches stale bytes from earlier reads leaking into the next file or hash.
+    for (i, size) in [524_289, 3, 0, 262_143, 262_144, 262_145, 1]
+        .into_iter()
+        .cycle()
+        .take(28)
+        .enumerate()
+    {
+        let name = format!("mixed-{i:02}.bin");
+        let bytes: Vec<u8> = (0..size).map(|n| ((n + i) % 251) as u8).collect();
+        fs::write(f.plan.sources[0].join(&name), &bytes)?;
+        expected.push((name, bytes));
+    }
+    f.engine.backup(&f.plan).await?;
+    f.engine.check(&f.plan).await?;
+    let snapshot = f.engine.snapshots(&f.plan).await?.remove(0);
+    f.engine.restore(&f.plan, &snapshot.id, &f.restore).await?;
+    let restored = fs::read_dir(&f.restore)?.next().unwrap()?.path();
+    for (name, bytes) in expected {
+        assert_eq!(
+            fs::read(restored.join("01-Documente și poze").join(name))?,
+            bytes
+        );
+    }
     Ok(())
 }
 

@@ -1,6 +1,6 @@
 [package]
 name = "straja-backup"
-version = "0.5.3"
+version = "0.6.2"
 authors = ["Weblike PRO"]
 homepage = "https://strajabackup.com/"
 edition = "2024"
@@ -51,6 +51,9 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Securit
 [dev-dependencies]
 tempfile = "3"
 chrono-tz = "0.10"
+
+[build-dependencies]
+cc = "1"
 
 [profile.release]
 lto = "thin"

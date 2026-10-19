@@ -89,6 +89,38 @@ fn open_site(address: &str) -> Result<(), String> {
     }
 }
 
+fn launch_vss_agent() -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::UI::Shell::ShellExecuteW;
+    let exe = std::env::current_exe()
+        .map_err(|e| e.to_string())?
+        .with_file_name("straja-agent.exe");
+    let sid = straja::security::user_sid().map_err(|e| e.to_string())?;
+    let path: Vec<u16> = exe.as_os_str().encode_wide().chain(Some(0)).collect();
+    let args: Vec<u16> = format!("--vss-start --expected-user-sid {sid}")
+        .encode_utf16()
+        .chain(Some(0))
+        .collect();
+    let verb: Vec<u16> = "runas".encode_utf16().chain(Some(0)).collect();
+    let result = unsafe {
+        ShellExecuteW(
+            std::ptr::null_mut(),
+            verb.as_ptr(),
+            path.as_ptr(),
+            args.as_ptr(),
+            std::ptr::null(),
+            0,
+        )
+    } as isize;
+    if result <= 32 {
+        Err(tr(
+            "Pornirea agentului VSS a fost anulată sau refuzată de Windows.",
+        ))
+    } else {
+        Ok(())
+    }
+}
+
 fn app_theme(_: &App) -> Theme {
     Theme::custom(
         "Straja",
@@ -162,7 +194,7 @@ pub fn preview() -> iced::Result {
                 sources: vec![PathBuf::from(r"C:\Example\Projects")],
                 repository: PathBuf::from(r"E:\Backups\Projects"),
                 excluded_paths: vec![PathBuf::from(r"C:\Example\Projects\cache")],
-                excludes: vec!["*.tmp".into()], keep_last: Some(7),
+                excludes: vec!["*.tmp".into()], keep_last: Some(7), use_vss: false,
                 schedule: Schedule::Daily { hour:19, minute:0 }, enabled: true,
                 next_due: Some(chrono::Utc::now()), last_success: None,
             });
@@ -208,6 +240,13 @@ pub fn preview() -> iced::Result {
             if let Some(code) = std::env::args().skip_while(|arg| arg != "--preview-language").nth(1) {
                 i18n::set(Language::from_code(&code));
             }
+            if std::env::args().any(|arg| arg == "--preview-vss") {
+                let mut wizard = Wizard::from_plan(&app.state.plans[0]);
+                wizard.use_vss = true;
+                wizard.step = 2;
+                app.wizard = Some(wizard);
+                app.page = Page::Plans;
+            }
             (app, Task::none())
         },
         |app: &mut App, message| {
@@ -223,7 +262,7 @@ pub fn preview() -> iced::Result {
                     | Message::Back | Message::ExcludeErrorPath(_) | Message::ManualExclusion(_)
                     | Message::EditExclusion(_) | Message::CancelExclusion | Message::SaveExclusion
                     | Message::RemoveExclusion(_) | Message::Name(_) | Message::Mode(_) | Message::Frequency(_)
-                    | Message::Day(_) | Message::Time(_) | Message::Interval(_) | Message::KeepAll(_)
+                    | Message::Day(_) | Message::Time(_) | Message::Interval(_) | Message::KeepAll(_) | Message::UseVss(_)
                     | Message::KeepCount(_) | Message::AskInstallUpdate | Message::LaterUpdate) => { return app.update(message); }
                 _ => {}
             }
@@ -350,6 +389,7 @@ enum Message {
     Deleted(String, Result<Response, String>),
     OpenCreatorSite,
     KeepAll(bool),
+    UseVss(bool),
     KeepCount(String),
     Mode(BackupMode),
     OpenFolder(PathBuf),
@@ -396,11 +436,13 @@ enum Message {
     SelectSnapshot(String),
     Restore,
     StartAgent,
+    StartVssAgent,
     AgentStarted(Result<(), String>),
 }
 
 struct Wizard {
     keep_all: bool,
+    use_vss: bool,
     keep_count: String,
     mode: BackupMode,
     editing: Option<String>,
@@ -426,6 +468,7 @@ impl Default for Wizard {
     fn default() -> Self {
         Self {
             keep_all: true,
+            use_vss: false,
             keep_count: "7".into(),
             mode: BackupMode::Encrypted,
             editing: None,
@@ -459,6 +502,7 @@ impl Wizard {
     fn from_plan(p: &Plan) -> Self {
         let mut w = Self::default();
         w.mode = p.mode;
+        w.use_vss = p.use_vss;
         w.keep_all = p.keep_last.is_none();
         w.keep_count = p.keep_last.unwrap_or(7).to_string();
         w.editing = Some(p.id.clone());
@@ -1077,6 +1121,35 @@ impl App {
                     Message::AgentStarted,
                 );
             }
+            Message::StartVssAgent => {
+                if !self.available() || self.state.service_mode {
+                    return Task::none();
+                }
+                self.busy = true;
+                return Task::perform(
+                    async {
+                        tokio::task::spawn_blocking(launch_vss_agent)
+                            .await
+                            .map_err(|e| e.to_string())??;
+                        for _ in 0..30 {
+                            tokio::time::sleep(Duration::from_secs(1)).await;
+                            if let Ok(Ok(Response::State(state))) = tokio::time::timeout(
+                                Duration::from_secs(2),
+                                protocol::call(Request::State),
+                            )
+                            .await
+                                && state.vss_available
+                            {
+                                return Ok(());
+                            }
+                        }
+                        Err(tr(
+                            "Agentul VSS nu s-a conectat. Verifică mesajul Windows și folosește același cont de utilizator.",
+                        ))
+                    },
+                    Message::AgentStarted,
+                );
+            }
             Message::AgentStarted(result) => {
                 self.busy = false;
                 match result {
@@ -1247,6 +1320,11 @@ impl App {
                     w.excludes = s;
                 }
             }
+            Message::UseVss(value) => {
+                if let Some(w) = self.wizard.as_mut() {
+                    w.use_vss = value;
+                }
+            }
             Message::KeepAll(value) => {
                 if let Some(w) = self.wizard.as_mut() {
                     w.keep_all = value;
@@ -1364,6 +1442,7 @@ impl App {
                 };
                 let changes = PlanChanges {
                     keep_last,
+                    use_vss: w.use_vss,
                     name: w.name.clone(),
                     sources: w.sources.clone(),
                     repository,
@@ -1391,6 +1470,7 @@ impl App {
                         excluded_paths: changes.excluded_paths,
                         excludes: changes.excludes,
                         keep_last: changes.keep_last,
+                        use_vss: changes.use_vss,
                         schedule: changes.schedule,
                         password: w.password.clone(),
                     })
@@ -1506,6 +1586,17 @@ impl App {
             }
         }
         Task::none()
+    }
+    fn vss_activation(&self) -> Element<'_, Message> {
+        let mut content =
+            column![text("VSS necesită agent cu drepturi de administrator.").size(15)];
+        if self.state.service_mode {
+            content = content.push(text("Configurează serviciul Straja cu un cont administrator, apoi repornește serviciul din Windows Services.").size(14));
+        } else {
+            content = content.push(text("Activarea repornește agentul cu aprobarea Windows, sub același cont. Pentru programare fără autentificare, configurează serviciul Straja.").size(14).color(MUTED))
+                .push(button(text("Activează agentul VSS")).on_press_maybe(self.available().then_some(Message::StartVssAgent)));
+        }
+        content.spacing(10).into()
     }
     fn available(&self) -> bool {
         self.compatible()
@@ -1669,6 +1760,10 @@ impl App {
                 text("Motorul Restic lipsește pentru planurile criptate. Modul cu fișiere necriptate nu necesită Restic.")
                     .color(Color::from_rgb(0.78, 0.22, 0.25)),
             ));
+        }
+        if self.connected && !self.state.vss_available && self.state.plans.iter().any(|p| p.use_vss)
+        {
+            body = body.push(card(self.vss_activation()));
         }
         if !self.notice.is_empty() {
             let mut notice = column![
@@ -2000,6 +2095,15 @@ impl App {
                 .push(horizontal_rule(1))
                 .push(text(format!("MOD: {}", p.mode)).size(14).color(BLUE))
                 .push(text(retention_label(p.keep_last)).size(13).color(MUTED))
+                .push(
+                    text(if p.use_vss {
+                        "VSS: activat — fișiere în folosință"
+                    } else {
+                        "VSS: dezactivat"
+                    })
+                    .size(13)
+                    .color(MUTED),
+                )
                 .push(text(format!("DESTINAȚIE: {}", p.repository.display())).size(14))
                 .push(
                     container(
@@ -2532,6 +2636,17 @@ impl App {
                 }
                 content = content
                     .push(horizontal_rule(1))
+                    .push(checkbox(w.use_vss).label(tr("Backup pentru fișiere în folosință (Windows VSS)")).on_toggle(Message::UseVss))
+                    .push(text("VSS necesită agent cu drepturi de administrator și surse pe discuri locale NTFS. Nu include modificările nesalvate și nu înlocuiește backupul nativ al bazelor de date.").size(14).color(MUTED));
+                if w.use_vss && !self.state.vss_available {
+                    content = content.push(self.vss_activation());
+                }
+                if w.use_vss && self.state.vss_available {
+                    content =
+                        content.push(text("Agentul are drepturile necesare pentru VSS.").size(14));
+                }
+                content = content
+                    .push(horizontal_rule(1))
                     .push(text("Câte copii păstrezi?").size(20))
                     .push(
                         checkbox(w.keep_all)
@@ -2568,6 +2683,11 @@ impl App {
                         .size(14)
                         .color(MUTED),
                     );
+                content = content.push(text(if w.use_vss {
+                    "VSS: activat — fișiere în folosință"
+                } else {
+                    "VSS: dezactivat"
+                }));
                 for source in &w.sources {
                     content = content.push(raw_text(source.display().to_string()).size(14));
                 }
@@ -2725,6 +2845,7 @@ mod tests {
                 .collect(),
             excludes: vec!["*.tmp".into()],
             keep_last: Some(7),
+            use_vss: false,
             schedule: Schedule::Manual,
             enabled: true,
             next_due: None,
@@ -2931,6 +3052,7 @@ mod tests {
             excluded_paths: vec![PathBuf::from(r"C:\laragon\temp")],
             excludes: vec!["*.tmp".into()],
             keep_last: Some(5),
+            use_vss: false,
             schedule: Schedule::Daily {
                 hour: 19,
                 minute: 0,
@@ -3033,6 +3155,7 @@ mod tests {
             excluded_paths: vec![],
             excludes: vec![],
             keep_last: None,
+            use_vss: false,
             schedule: Schedule::Manual,
             enabled: true,
             next_due: None,
@@ -3126,6 +3249,7 @@ mod tests {
             excluded_paths: vec![PathBuf::from(r"C:\Data\FolderB")],
             excludes: vec!["*.tmp".into()],
             keep_last: Some(7),
+            use_vss: false,
             schedule: Schedule::Weekly {
                 weekday: 3,
                 hour: 8,

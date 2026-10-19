@@ -12,6 +12,7 @@ use std::{
     fs::{self, File, OpenOptions},
     io::{self, Read, Write},
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 fn open_input(path: &Path) -> Result<File> {
@@ -140,7 +141,7 @@ pub(crate) async fn verify(
     engine: &Engine,
     mode: BackupMode,
     folder: &Path,
-    m: Manifest,
+    m: Arc<Manifest>,
     output: Option<PathBuf>,
 ) -> Result<()> {
     let (engine, folder) = (engine.clone(), folder.to_path_buf());
@@ -156,14 +157,10 @@ fn verify_sync(
     output: Option<&Path>,
 ) -> Result<()> {
     let archive = open_input(&folder.join(mode.archive_name().context("Format lipsă")?))?;
-    let mut manifest_bytes = Vec::new();
-    open_input(&folder.join(MANIFEST))?
-        .take(64 * 1024 * 1024 + 1)
-        .read_to_end(&mut manifest_bytes)?;
-    ensure!(
-        manifest_bytes.len() <= 64 * 1024 * 1024,
-        "Manifest prea mare."
-    );
+    let expected_manifest = crate::metadata::fingerprint(
+        open_input(&folder.join(MANIFEST))?,
+        crate::metadata::MANIFEST_LIMIT,
+    )?;
     let entries: HashMap<String, &Entry> = m
         .entries
         .iter()
@@ -189,13 +186,14 @@ fn verify_sync(
             ));
             if key == MANIFEST {
                 ensure!(
-                    !directory && size == manifest_bytes.len() as u64,
+                    !directory && size == expected_manifest.0,
                     "Manifest arhivat nevalid."
                 );
-                let mut bytes = Vec::new();
-                reader.take(size + 1).read_to_end(&mut bytes)?;
                 ensure!(
-                    bytes == manifest_bytes,
+                    crate::metadata::fingerprint(
+                        reader.take(size + 1),
+                        crate::metadata::MANIFEST_LIMIT
+                    )? == expected_manifest,
                     "Manifestul arhivei diferă de metadatele copiei."
                 );
                 return Ok(());
@@ -308,4 +306,77 @@ fn verify_sync(
     }
     ensure!(seen.len() == entries.len() + 2, "Fișiere lipsă în arhivă.");
     Ok(())
+}
+
+#[cfg(test)]
+mod metadata_tests {
+    use super::*;
+    use std::io::{Seek, SeekFrom};
+
+    #[tokio::test]
+    async fn large_legacy_json_is_verified_and_restored_in_every_archive_format() -> Result<()> {
+        for mode in [BackupMode::Zip, BackupMode::TarGz, BackupMode::SevenZip] {
+            let temp = tempfile::tempdir()?;
+            let folder = temp.path().join("backup");
+            fs::create_dir_all(folder.join("Fisiere/source"))?;
+            fs::write(folder.join("Fisiere/source/data.txt"), b"saved content")?;
+            let now = chrono::Utc::now();
+            let m = Manifest {
+                mode,
+                version: 1,
+                plan_id: "metadata-test".into(),
+                id: "Backup-test".into(),
+                time: now,
+                sources: vec![r"C:\Source".into()],
+                entries: vec![
+                    Entry {
+                        path: "Fisiere/source".into(),
+                        directory: true,
+                        size: 0,
+                        sha256: String::new(),
+                        modified: now,
+                    },
+                    Entry {
+                        path: "Fisiere/source/data.txt".into(),
+                        directory: false,
+                        size: 13,
+                        sha256: format!("{:x}", Sha256::digest(b"saved content")),
+                        modified: now,
+                    },
+                ],
+            };
+            let metadata_path = folder.join(MANIFEST);
+            let mut file = File::create(&metadata_path)?;
+            // Valid legacy pretty JSON with trailing whitespace crosses the old
+            // 64 MiB boundary without requiring hundreds of thousands of files.
+            serde_json::to_writer_pretty(&mut file, &m)?;
+            for _ in 0..1024 {
+                file.write_all(&[b' '; 64 * 1024])?;
+            }
+            file.sync_all()?;
+            drop(file);
+            assert!(fs::metadata(&metadata_path)?.len() > 64 * 1024 * 1024);
+            let m = crate::metadata::read(&metadata_path, crate::metadata::MANIFEST_LIMIT)?;
+            let engine = Engine {
+                binary: temp.path().join("unused.exe"),
+                store: crate::store::Store::open(&temp.path().join("state"))?,
+                live: Default::default(),
+            };
+            let m = Arc::new(create(&engine, mode, &folder, m).await?);
+            let restored = temp.path().join("restored");
+            verify(&engine, mode, &folder, m.clone(), Some(restored.clone())).await?;
+            assert_eq!(
+                fs::read(restored.join("source/data.txt"))?,
+                b"saved content"
+            );
+            // Alter only whitespace: semantic JSON equality is insufficient. The
+            // archive must still match the exact external metadata bytes via SHA-256.
+            let mut changed = OpenOptions::new().write(true).open(&metadata_path)?;
+            changed.seek(SeekFrom::End(-1))?;
+            changed.write_all(b"\t")?;
+            drop(changed);
+            assert!(verify(&engine, mode, &folder, m, None).await.is_err());
+        }
+        Ok(())
+    }
 }

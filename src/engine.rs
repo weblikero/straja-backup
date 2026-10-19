@@ -13,6 +13,33 @@ use tokio::{
 
 pub type LiveProgress = Arc<Mutex<Option<Progress>>>;
 
+fn restic_vss_error(message: &str) -> bool {
+    let compact: String = message
+        .chars()
+        .filter(|c| !c.is_ascii_whitespace())
+        .collect();
+    compact.contains("\"message_type\":\"error\"")
+        || message.contains("failed to create snapshot")
+        || message.contains("failed to delete VSS snapshot")
+}
+
+#[cfg(test)]
+mod vss_tests {
+    use super::*;
+    #[test]
+    fn detects_errors_even_when_restic_would_exit_successfully() {
+        assert!(restic_vss_error(
+            r#"{"message_type": "error", "error":{"message":"failed to create snapshot"}}"#
+        ));
+        assert!(restic_vss_error(
+            r#"{"message_type":"error","item":"C:\\"}"#
+        ));
+        assert!(!restic_vss_error(
+            r#"{"message_type":"status","percent_done":0.5}"#
+        ));
+    }
+}
+
 #[derive(Clone)]
 pub struct Engine {
     pub binary: PathBuf,
@@ -67,25 +94,44 @@ impl Engine {
         drop(input);
         let stderr = child.stderr.take().context("Lipsește stderr")?;
         // Drain concurrently: a full stderr pipe must never deadlock a running backup.
+        let vss_backup = plan.use_vss && args.first().is_some_and(|arg| arg == "backup");
         let errors = tokio::spawn(async move {
             let mut reader = BufReader::new(stderr);
             let mut buffer = [0u8; 4096];
             let mut tail = Vec::new();
+            let mut vss_error = false;
+            let mut scan_tail = String::new();
             loop {
                 let n = reader.read(&mut buffer).await?;
                 if n == 0 {
                     break;
                 }
                 tail.extend_from_slice(&buffer[..n]);
+                if vss_backup {
+                    scan_tail.push_str(&String::from_utf8_lossy(&buffer[..n]));
+                    // Restic's VSS callback does not reliably affect its exit code.
+                    // Detect every structured error, including cleanup, before truncating logs.
+                    vss_error |= restic_vss_error(&scan_tail);
+                    if scan_tail.len() > 8192 {
+                        let start = scan_tail
+                            .char_indices()
+                            .rev()
+                            .nth(4096)
+                            .map_or(0, |(i, _)| i);
+                        scan_tail.drain(..start);
+                    }
+                }
                 if tail.len() > 32768 {
                     tail.drain(..tail.len() - 32768);
                 }
             }
-            Ok::<_, std::io::Error>(String::from_utf8_lossy(&tail).into_owned())
+            Ok::<_, std::io::Error>((String::from_utf8_lossy(&tail).into_owned(), vss_error))
         });
         let mut lines = BufReader::new(child.stdout.take().context("Lipsește stdout")?).lines();
         let mut output = String::new();
+        let mut vss_error = false;
         while let Some(line) = lines.next_line().await? {
+            vss_error |= vss_backup && restic_vss_error(&line);
             if track {
                 if let Ok(value) = serde_json::from_str::<Value>(&line) {
                     self.parse_progress(&value);
@@ -101,8 +147,13 @@ impl Engine {
             output.push('\n');
         }
         let status = child.wait().await?;
-        let stderr = errors.await??;
-        Ok((status.code().unwrap_or(-1), output, stderr))
+        let (mut stderr, stderr_vss_error) = errors.await??;
+        let code = status.code().unwrap_or(-1);
+        if vss_error || stderr_vss_error {
+            stderr.insert_str(0, "VSS a raportat o eroare. Copia poate conține date citite fără snapshot; nu este considerată completă. ");
+            return Ok((if code == 0 { 3 } else { code }, output, stderr));
+        }
+        Ok((code, output, stderr))
     }
     fn parse_progress(&self, v: &Value) {
         if let Some(p) = self.live.lock().unwrap().as_mut() {
@@ -157,6 +208,18 @@ impl Engine {
     pub async fn backup(&self, plan: &Plan) -> Result<(String, String)> {
         crate::exclusions::validate_paths(&plan.sources, &plan.excluded_paths)?;
         validate_retention(plan.keep_last)?;
+        if plan.use_vss {
+            crate::vss::require_privileges()?;
+            let plan = plan.clone();
+            tokio::task::spawn_blocking(move || {
+                if plan.mode == BackupMode::Encrypted {
+                    crate::vss::validate_restic_mounts(&plan)
+                } else {
+                    crate::vss::validate_sources(&plan.sources)
+                }
+            })
+            .await??;
+        }
         let initialized = plan.repository.join("config").exists()
             || plan.repository.join(crate::plain::MARKER).exists();
         let before = if plan.keep_last.is_some() && initialized {
@@ -260,6 +323,14 @@ impl Engine {
             "--tag".into(),
             format!("straja:{}", plan.id),
         ];
+        if plan.use_vss {
+            self.update("Creez snapshotul Windows VSS…");
+            args.extend([
+                "--use-fs-snapshot".into(),
+                "-o".into(),
+                "vss.timeout=120s".into(),
+            ]);
+        }
         for pattern in &plan.excludes {
             args.extend(["--exclude".into(), pattern.clone()]);
         }

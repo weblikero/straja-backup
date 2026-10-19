@@ -33,6 +33,7 @@ fn fixture(mode: BackupMode, keep_last: Option<u32>) -> Result<Fixture> {
     let plan = store.add(NewPlan {
         mode,
         keep_last,
+        use_vss: false,
         name: "Arhive".into(),
         sources: vec![source, single],
         repository: repo,
@@ -173,6 +174,7 @@ async fn retention_default_edit_failure_unknown_files_and_clock_reversal() -> Re
         excludes: f.plan.excludes.clone(),
         schedule: Schedule::Manual,
         keep_last: Some(1),
+        use_vss: false,
     };
     let edited = f.engine.store.update(&f.plan.id, changes)?;
     assert_eq!(f.engine.store.plan(&edited.id)?.keep_last, Some(1));

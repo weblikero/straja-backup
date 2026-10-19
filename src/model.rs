@@ -110,6 +110,8 @@ pub struct Plan {
     pub excludes: Vec<String>,
     #[serde(default)]
     pub keep_last: Option<u32>,
+    #[serde(default)]
+    pub use_vss: bool,
     pub schedule: Schedule,
     pub enabled: bool,
     pub next_due: Option<DateTime<Utc>>,
@@ -129,6 +131,8 @@ pub struct NewPlan {
     pub excludes: Vec<String>,
     #[serde(default)]
     pub keep_last: Option<u32>,
+    #[serde(default)]
+    pub use_vss: bool,
     pub schedule: Schedule,
     pub password: String,
 }
@@ -164,6 +168,8 @@ pub struct PlanChanges {
     pub excludes: Vec<String>,
     #[serde(default)]
     pub keep_last: Option<u32>,
+    #[serde(default)]
+    pub use_vss: bool,
     pub schedule: Schedule,
 }
 
@@ -204,6 +210,7 @@ impl NewPlan {
             excluded_paths: self.excluded_paths.clone(),
             excludes: self.excludes.clone(),
             keep_last: self.keep_last,
+            use_vss: self.use_vss,
             schedule: self.schedule.clone(),
         }
         .validate(data_dir)?;
@@ -224,6 +231,9 @@ impl PlanChanges {
         }
         crate::exclusions::validate_paths(&self.sources, &self.excluded_paths)?;
         validate_retention(self.keep_last)?;
+        if self.use_vss {
+            crate::vss::validate_sources(&self.sources)?;
+        }
         self.schedule.validate()?;
         if !self.repository.is_absolute() || !self.repository.is_dir() {
             bail!("Alege un folder de destinație existent, folosind calea completă.");
@@ -295,6 +305,8 @@ pub struct State {
     pub active: Option<Progress>,
     pub service_mode: bool,
     pub engine_available: bool,
+    #[serde(default)]
+    pub vss_available: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -98,6 +98,7 @@ impl Worker {
             active: self.engine.live.lock().unwrap().clone(),
             service_mode: self.service_mode,
             engine_available: self.engine.binary.is_file(),
+            vss_available: crate::vss::available(),
         })
     }
     fn start(
@@ -535,6 +536,7 @@ mod tests {
         let plan = store
             .add(NewPlan {
                 keep_last: None,
+                use_vss: false,
                 mode: BackupMode::Plain,
                 name: "Delete test".into(),
                 sources: vec![source],

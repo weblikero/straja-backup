@@ -9,9 +9,21 @@ Straja favors foreground applications over backup throughput. It does not change
 - The tray receives the plan count, active operation and latest finished outcome, without transferring all plans and history. Indexed history queries avoid repeated sorting. Old agents fall back to the original request so their version warning remains available. Unchanged icons/tooltips are not resent to Explorer.
 - ZIP and TAR.GZ use compression level 1; 7z uses single-thread LZMA2 level 1. New archives can be larger. Existing archives still restore; formats and integrity verification remain unchanged.
 - Archive creation passes its manifest back instead of cloning it and iterates file paths on demand. Archive verification reuses a 256 KiB buffer across entries.
-- The source read lock is released after copying and checking source metadata, before flushing and verifying the destination. Files open for writing may still be unavailable. VSS/live database snapshots are not implemented; short read locks and filesystem errors remain possible.
+- The source read lock is released after copying and checking source metadata, before flushing and verifying the destination. Files open for writing may still be unavailable. Since 0.6.0, VSS can read supported local NTFS sources from a snapshot. Without VSS, short read locks and filesystem errors remain possible; live database consistency is not guaranteed.
 
 The agent still runs only one backup/restore/check at a time. Its per-account pipe prevents two workers owning the same database. Verification and retention safety are preserved. Zero contention or compatibility with every application cannot be guaranteed: disk speed, antivirus scans, file counts, source changes and repository size still matter.
+
+## Large manifests — 0.6.2
+
+The old 64 MiB limit applied to pretty-printed JSON written after source copying, and separately to the raw external and archived manifest buffers. A source set with many paths could therefore copy for hours and fail before compression. All manifest paths now share a 512 MiB serialized-size limit. Compact JSON is streamed to a buffered file; parsing runs on blocking workers from a bounded buffered reader. Archive verification hashes the external metadata and the archived metadata incrementally and compares both length and SHA-256. It does not allocate either complete byte array. Archive creation keeps the manifest returned by the copy stage instead of parsing it again, and archive restore shares one parsed index using `Arc` instead of cloning it for each verification pass.
+
+Scanning accumulates a conservative JSON-size budget using borrowed paths, maximum numeric file sizes, checksums and timestamp margin. An over-budget plan fails before file content copying; staging/marker creation and snapshot creation may already have occurred, and owned snapshot cleanup still runs. Existing partial copies are preserved. The parsed entry list, validation sets and archive lookup tables still scale with the number/length of paths; this is not constant-memory indexing or a hard RAM cap. The 512 MiB limit is not a maximum file-data size. Split extremely large source sets into separate plans.
+
+## Small-file buffers — 0.6.1
+
+Plain copying, pre-archive staging, plain verification and restoration now reuse a 256 KiB buffer across files. The previous copy and digest functions each allocated and zeroed a new 1 MiB buffer for every file, including tiny files. SHA-256 destination rereads, durable flushes, source sharing and snapshot cleanup are unchanged. Compression and Restic budgets are unchanged.
+
+A live diagnostic during a VSS TAR.GZ backup found the source C: disk continuously busy in five samples, concurrent PostgreSQL I/O and 52,542–90,894 page faults/s in the agent. Page faults include soft faults and must not be interpreted as disk reads or proof of insufficient RAM. About 26 GiB was available in the initial sample. AnyDesk also logged DNS and UI errors; the report does not establish that Straja caused its failure. No installed process, schedule or backup was stopped or changed. A synthetic background-priority baseline probe could not finish within its five-minute budget under that concurrent load and was stopped; no before/after speedup or CPU percentage reduction is claimed. Ten focused plain/archive integration tests passed, including mixed-size buffer reuse and restoration.
 
 ## Interactive rendering — 0.5.2
 
