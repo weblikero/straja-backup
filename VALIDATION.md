@@ -1,5 +1,12 @@
 # Validare — 19 octombrie 2026
 
+### Release preparation — 0.6.2 (2026-10-19)
+
+- Fresh `scripts/test.ps1` run passed 74 tests: 67 ordinary tests plus 7 explicitly enabled Restic/worker/exclusion integration tests (`test-output/release-suite-0.6.2.log`). Native elevated VSS and tray tests remain outside this run.
+- The isolated 0.6.2 TestVariant installer passed installation, upgrade, uninstall, registration, shortcuts, startup options, locked-file refusal and data preservation. The updater's installer arguments and read-sharing lock passed too (`test-output/installer-lifecycle-0.6.2.log`). This used a separate test application ID and did not replace the real installation or use real plans. An outer command incorrectly treated an unset `$LASTEXITCODE` as failure; the script's completed PASS log and individual installer exit codes are the validation evidence.
+- Published source commit `0361bf3` and tag `v0.6.2`. Uploaded the production installer, portable ZIP and SHA-256 sidecars as a draft. GitHub's installer and portable digests match local artifacts. Corrected the release helper to resolve drafts by authenticated release ID: the public tag endpoint returned 404 for the newly uploaded draft.
+- The draft is deliberately not discoverable by installed clients. The publication gate in `RELEASING.md` remains: complete public download/helper/restart, all-users UAC and actual installed SCM service restart have not been validated end to end on disposable Windows. No stable rollout, real installation change or full real-source backup is claimed.
+
 ### Large backup manifests — 0.6.2 (2026-10-19)
 
 - Confirmed the reported installed 0.6.0 run had finished with the 64 MB metadata error. Its partial `Fisiere` directory exists and the manifest is absent. Only status and directory metadata were read; the partial copy, installed plans and agent were not modified. No automatic reconstruction/resumption or new real backup was attempted.

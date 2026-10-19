@@ -30,7 +30,14 @@ try {
     & gh release create "v$version" @assets --repo weblikero/straja-backup --verify-tag --draft --title "Straja Backup $version" --notes-file $NotesFile
     if ($LASTEXITCODE -ne 0) { throw 'GitHub draft release creation failed.' }
     if (!$PortableOnly) {
-        $releaseJson = & gh api "repos/weblikero/straja-backup/releases/tags/v$version"
+        # The public tag endpoint can return 404 for drafts. Resolve the private
+        # draft through the authenticated list and then read its release ID.
+        $draftFilter = '.[] | select(.tag_name == "v' + $version + '" and .draft == true) | .id'
+        $draftIds = @(& gh api "repos/weblikero/straja-backup/releases" --paginate --jq $draftFilter)
+        if ($LASTEXITCODE -ne 0 -or $draftIds.Count -ne 1 -or $draftIds[0] -notmatch '^\d+$') {
+            throw 'Cannot resolve the uploaded draft uniquely. Leave the release as a draft.'
+        }
+        $releaseJson = & gh api "repos/weblikero/straja-backup/releases/$($draftIds[0])"
         if ($LASTEXITCODE -ne 0) { throw 'Cannot verify uploaded installer metadata. Leave the release as a draft.' }
         $release = ($releaseJson -join "`n") | ConvertFrom-Json
         $installerName = "StrajaBackup-$version-windows-x64-setup.exe"
