@@ -1,0 +1,12 @@
+/target/
+/.tools/
+/dist/
+/test-output/
+*.log
+.env
+.env.*
+*.sqlite
+*.sqlite-*
+*.pfx
+*.p12
+*.key

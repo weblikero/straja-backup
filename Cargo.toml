@@ -1,0 +1,56 @@
+[package]
+name = "straja-backup"
+version = "0.4.1"
+authors = ["Weblike PRO"]
+homepage = "https://strajabackup.com/"
+edition = "2024"
+license = "MIT"
+description = "Open-source Windows backup and restore with a Rust interface and Restic encryption"
+
+[lib]
+name = "straja"
+
+[[bin]]
+name = "straja"
+path = "src/main.rs"
+required-features = ["gui"]
+
+[[bin]]
+name = "straja-agent"
+path = "src/bin/agent.rs"
+
+[features]
+default = ["gui"]
+gui = ["dep:iced", "dep:rfd"]
+
+[dependencies]
+anyhow = "1"
+chrono = { version = "0.4", features = ["serde"] }
+iced = { version = "0.14", default-features = false, features = ["tiny-skia", "tokio", "advanced", "svg"], optional = true }
+rfd = { version = "0.15", optional = true }
+rusqlite = { version = "0.38", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+semver = "1"
+globset = "0.4"
+zip = { version = "8", default-features = false, features = ["deflate"] }
+flate2 = "1"
+tar = "0.4"
+sevenz-rust2 = { version = "0.23", default-features = false, features = ["compress"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "net", "io-util", "fs", "process", "sync", "signal"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+zeroize = "1"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-service = "0.8"
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Security_Cryptography", "Win32_System_Threading", "Win32_System_Memory", "Win32_System_LibraryLoader", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi"] }
+
+[dev-dependencies]
+tempfile = "3"
+chrono-tz = "0.10"
+
+[profile.release]
+lto = "thin"
+strip = true
