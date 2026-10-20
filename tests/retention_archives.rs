@@ -70,10 +70,11 @@ fn independently_read(path: &std::path::Path, mode: BackupMode) -> Result<String
                     .by_name("Fisiere/01-Documente și poze/gol/")?
                     .is_dir()
             );
-            assert!(
+            assert_eq!(
                 reader
                     .by_name("Fisiere/01-Documente și poze/exclus.TMP")
-                    .is_err()
+                    .is_ok(),
+                cfg!(unix)
             );
         }
         BackupMode::TarGz => {
@@ -138,7 +139,10 @@ async fn all_archive_formats_roundtrip_compress_and_keep_two() -> Result<()> {
                 "sursă individuală"
             );
             assert!(restored.join("01-Documente și poze/gol").is_dir());
-            assert!(!restored.join("01-Documente și poze/exclus.TMP").exists());
+            assert_eq!(
+                restored.join("01-Documente și poze/exclus.TMP").exists(),
+                cfg!(unix)
+            );
             assert_eq!(
                 fs::metadata(restored.join("01-Documente și poze/notițe.txt"))?.modified()?,
                 fs::metadata(f.plan.sources[0].join("notițe.txt"))?.modified()?
@@ -197,6 +201,16 @@ async fn retention_default_edit_failure_unknown_files_and_clock_reversal() -> Re
         assert!(f.engine.backup(&edited).await.is_err());
         assert_eq!(f.engine.snapshots(&edited).await?.len(), 3);
         drop(locked);
+    }
+    #[cfg(unix)]
+    {
+        // Unix does not have Windows share-mode locks. An unsupported symlink
+        // produces a real failed backup and a partial copy on these platforms.
+        let link = edited.sources[0].join("unsupported-link");
+        std::os::unix::fs::symlink(edited.sources[0].join("notițe.txt"), &link)?;
+        assert!(f.engine.backup(&edited).await.is_err());
+        assert_eq!(f.engine.snapshots(&edited).await?.len(), 3);
+        fs::remove_file(link)?;
     }
     // A newer wall clock on old snapshots must never cause deletion of the just-completed copy.
     for copy in &originals {

@@ -112,7 +112,7 @@ async fn ftp_backup_restore_retention_and_failure_preserve_other_files() -> Resu
                 "--dir-cache-time",
                 "0s",
                 "--config",
-                "NUL",
+                straja::platform::NULL_DEVICE,
             ])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -252,7 +252,7 @@ async fn s3_transport_roundtrip_with_isolated_server() -> Result<()> {
                 "--auth-key",
                 "test-access,test-secret",
                 "--config",
-                "NUL",
+                straja::platform::NULL_DEVICE,
             ])
             .arg("--cert")
             .arg(&cert)

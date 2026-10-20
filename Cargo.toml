@@ -5,7 +5,7 @@ authors = ["Weblike PRO"]
 homepage = "https://strajabackup.com/"
 edition = "2024"
 license = "MIT"
-description = "Open-source Windows backup and restore with a Rust interface and Restic encryption"
+description = "Open-source desktop backup and restore with a Rust interface and Restic encryption"
 
 [lib]
 name = "straja"

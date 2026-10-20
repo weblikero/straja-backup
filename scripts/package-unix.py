@@ -69,6 +69,8 @@ OUT.mkdir(parents=True, exist_ok=True)
 
 def copy_payload(destination):
     destination.mkdir(parents=True, exist_ok=True)
+    subprocess.run([sys.executable, str(ROOT / "scripts/rust-license-notices.py"),
+                    str(destination / "RUST-DEPENDENCY-LICENSES.txt")], check=True)
     for name in ("straja", "straja-agent"):
         shutil.copy2(ROOT / "target/release" / name, destination / name)
     for name in ("restic", "rclone"):

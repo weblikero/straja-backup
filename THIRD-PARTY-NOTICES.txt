@@ -36,6 +36,9 @@ New dependency license texts are included in ARCHIVE-LICENSES.txt. Exact version
 
 GPU rendering uses Iced/wgpu with tiny-skia as a software fallback. Graphics license texts are included in GRAPHICS-LICENSES.txt.
 
-Online destinations use the unmodified Rclone 1.75.2 Windows binary (MIT).
+Online destinations use the platform-native Rclone 1.75.2 binary (MIT).
 Copyright (C) 2012 Nick Craig-Wood. License: RCLONE-LICENSE.txt.
 Source and upstream dependency notices: https://github.com/rclone/rclone/tree/v1.75.2
+
+Linux/macOS packages include RUST-DEPENDENCY-LICENSES.txt, collected from the
+resolved upstream crate archives, including native keychain and cryptography crates.
