@@ -30,6 +30,7 @@ TOOLS = ROOT / ".tools"
 TOOLS.mkdir(exist_ok=True)
 
 def fetch(url, path):
+    print(f"Downloading {url}", flush=True)
     request = urllib.request.Request(url, headers={"User-Agent": "Straja-packaging"})
     with urllib.request.urlopen(request, timeout=120) as response, open(path, "wb") as output:
         shutil.copyfileobj(response, output)
@@ -51,8 +52,8 @@ base = f"https://github.com/restic/restic/releases/download/v{restic_version}"
 archive = verified(f"{base}/{name}", f"{base}/SHA256SUMS", name)
 (TOOLS / "restic").write_bytes(bz2.decompress(archive.read_bytes()))
 rclone_version = "1.75.2"
-name = f"rclone-v{rclone_version}-{UPSTREAM_OS}-{UPSTREAM_ARCH}.zip"
-base = f"https://downloads.rclone.org/v{rclone_version}"
+name = f"rclone-v{rclone_version}-{'osx' if SYSTEM == 'Darwin' else 'linux'}-{UPSTREAM_ARCH}.zip"
+base = f"https://github.com/rclone/rclone/releases/download/v{rclone_version}"
 archive = verified(f"{base}/{name}", f"{base}/SHA256SUMS", name)
 with zipfile.ZipFile(archive) as z:
     member = next(n for n in z.namelist() if n.endswith("/rclone"))

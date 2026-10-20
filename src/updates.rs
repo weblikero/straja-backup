@@ -49,7 +49,11 @@ impl CheckError {
             }
             Self::RateLimited => "GitHub a limitat verificările. Încearcă din nou peste o oră.",
             Self::InvalidRelease => {
-                "Versiunea publicată nu are un pachet Straja valid pentru Windows x64."
+                if cfg!(windows) {
+                    "Versiunea publicată nu are un pachet Straja valid pentru Windows x64."
+                } else {
+                    "Versiunea publicată nu are un pachet pentru acest sistem și procesor."
+                }
             }
         }
     }

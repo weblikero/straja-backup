@@ -6906,5 +6906,131 @@
       "La suppression d'une exclusion réintègre le chemin dans les prochaines sauvegardes. Aucun fichier n'est supprimé. Les modifications prennent effet après Enregistrer le plan.",
       "Rimuovendo un'esclusione, il percorso viene incluso nuovamente nei backup futuri. Nessun file viene eliminato. Le modifiche si applicano dopo Salva piano."
     ]
+  },
+  {
+    "source": "BACKUP PENTRU FIȘIERELE TALE",
+    "parts": [
+      "BACKUP PENTRU FIȘIERELE TALE"
+    ],
+    "values": [
+      "BACKUP FOR YOUR FILES",
+      "BACKUP FÜR DEINE DATEIEN",
+      "COPIAS DE TUS ARCHIVOS",
+      "CÓPIAS DOS TEUS FICHEIROS",
+      "SAUVEGARDE DE VOS FICHIERS",
+      "BACKUP DEI TUOI FILE"
+    ]
+  },
+  {
+    "source": "Agentul continuă după închiderea ferestrei. Poți activa pornirea automată la autentificare. Keyring-ul contului trebuie să fie deblocat pentru acces la parole.",
+    "parts": [
+      "Agentul continuă după închiderea ferestrei. Poți activa pornirea automată la autentificare. Keyring-ul contului trebuie să fie deblocat pentru acces la parole."
+    ],
+    "values": [
+      "The agent continues after you close the window. You can enable startup at login. Unlock your login keychain to access saved passwords.",
+      "Der Agent läuft nach dem Schließen des Fensters weiter. Du kannst den Start bei der Anmeldung aktivieren. Entsperre den Schlüsselbund für gespeicherte Passwörter.",
+      "El agente sigue activo al cerrar la ventana. Puedes iniciarlo al iniciar sesión. Desbloquea el llavero para acceder a las contraseñas guardadas.",
+      "O agente continua após fechares a janela. Podes ativar o arranque ao iniciar sessão. Desbloqueia o porta-chaves para aceder às palavras-passe guardadas.",
+      "L’agent continue après la fermeture de la fenêtre. Vous pouvez activer son démarrage à la connexion. Déverrouillez le trousseau pour accéder aux mots de passe enregistrés.",
+      "L’agente continua dopo la chiusura della finestra. Puoi attivare l’avvio all’accesso. Sblocca il portachiavi per accedere alle password salvate."
+    ]
+  },
+  {
+    "source": "Parolele sunt protejate prin keyring-ul contului. Păstrează separat parola depozitului pentru recuperare pe alt calculator.",
+    "parts": [
+      "Parolele sunt protejate prin keyring-ul contului. Păstrează separat parola depozitului pentru recuperare pe alt calculator."
+    ],
+    "values": [
+      "Passwords are protected by your login keychain. Keep the repository password separately for recovery on another computer.",
+      "Passwörter werden durch deinen Schlüsselbund geschützt. Bewahre das Repository-Passwort separat für die Wiederherstellung auf einem anderen Computer auf.",
+      "Las contraseñas están protegidas por el llavero. Guarda la contraseña del repositorio por separado para recuperar en otro equipo.",
+      "As palavras-passe são protegidas pelo porta-chaves. Guarda a palavra-passe do repositório separadamente para recuperar noutro computador.",
+      "Les mots de passe sont protégés par votre trousseau. Conservez séparément le mot de passe du dépôt pour restaurer sur un autre ordinateur.",
+      "Le password sono protette dal portachiavi. Conserva separatamente la password del repository per il ripristino su un altro computer."
+    ]
+  },
+  {
+    "source": "Instalează pachetul pentru sistemul tău din pagina versiunii. Așteaptă terminarea backupurilor înainte de actualizare.",
+    "parts": [
+      "Instalează pachetul pentru sistemul tău din pagina versiunii. Așteaptă terminarea backupurilor înainte de actualizare."
+    ],
+    "values": [
+      "Install the package for your system from the release page. Wait for backups to finish before upgrading.",
+      "Installiere das Paket für dein System von der Versionsseite. Warte vor dem Update, bis Backups abgeschlossen sind.",
+      "Instala el paquete para tu sistema desde la página de la versión. Espera a que terminen las copias antes de actualizar.",
+      "Instala o pacote para o teu sistema a partir da página da versão. Aguarda o fim das cópias antes de atualizar.",
+      "Installez le paquet pour votre système depuis la page de la version. Attendez la fin des sauvegardes avant la mise à jour.",
+      "Installa il pacchetto per il tuo sistema dalla pagina della versione. Attendi la fine dei backup prima di aggiornare."
+    ]
+  },
+  {
+    "source": "Deschide pagina versiunii",
+    "parts": [
+      "Deschide pagina versiunii"
+    ],
+    "values": [
+      "Open release page",
+      "Versionsseite öffnen",
+      "Abrir página de la versión",
+      "Abrir página da versão",
+      "Ouvrir la page de la version",
+      "Apri pagina della versione"
+    ]
+  },
+  {
+    "source": "Verificare automată la pornire și la fiecare 24 de ore. Vei fi notificat când apare un pachet nou pentru sistemul tău.",
+    "parts": [
+      "Verificare automată la pornire și la fiecare 24 de ore. Vei fi notificat când apare un pachet nou pentru sistemul tău."
+    ],
+    "values": [
+      "Automatic checks at startup and every 24 hours. You will be notified when a new package is available for your system.",
+      "Automatische Prüfung beim Start und alle 24 Stunden. Du wirst benachrichtigt, wenn ein neues Paket für dein System verfügbar ist.",
+      "Comprobación automática al iniciar y cada 24 horas. Recibirás un aviso cuando haya un nuevo paquete para tu sistema.",
+      "Verificação automática ao iniciar e a cada 24 horas. Serás avisado quando houver um novo pacote para o teu sistema.",
+      "Vérification automatique au démarrage et toutes les 24 heures. Vous serez averti lorsqu’un nouveau paquet sera disponible pour votre système.",
+      "Controllo automatico all’avvio e ogni 24 ore. Riceverai una notifica quando sarà disponibile un nuovo pacchetto per il tuo sistema."
+    ]
+  },
+  {
+    "source": "Deschide folderul de backup",
+    "parts": [
+      "Deschide folderul de backup"
+    ],
+    "values": [
+      "Open backup folder",
+      "Backup-Ordner öffnen",
+      "Abrir carpeta de copias",
+      "Abrir pasta de cópias",
+      "Ouvrir le dossier de sauvegarde",
+      "Apri cartella di backup"
+    ]
+  },
+  {
+    "source": "Pornește agentul automat la autentificare",
+    "parts": [
+      "Pornește agentul automat la autentificare"
+    ],
+    "values": [
+      "Start agent automatically at login",
+      "Agent bei Anmeldung starten",
+      "Iniciar agente al iniciar sesión",
+      "Iniciar agente ao iniciar sessão",
+      "Démarrer l’agent à la connexion",
+      "Avvia agente all’accesso"
+    ]
+  },
+  {
+    "source": "Versiunea publicată nu are un pachet pentru acest sistem și procesor.",
+    "parts": [
+      "Versiunea publicată nu are un pachet pentru acest sistem și procesor."
+    ],
+    "values": [
+      "The published release has no package for this operating system and CPU.",
+      "Die veröffentlichte Version enthält kein Paket für dieses Betriebssystem und diese CPU.",
+      "La versión publicada no incluye un paquete para este sistema y procesador.",
+      "A versão publicada não inclui um pacote para este sistema e processador.",
+      "La version publiée ne contient pas de paquet pour ce système et ce processeur.",
+      "La versione pubblicata non contiene un pacchetto per questo sistema e processore."
+    ]
   }
 ]

@@ -410,6 +410,9 @@ enum Message {
     UpdatesChecked(Result<Option<Update>, CheckError>),
     Language(Language),
     OpenProductSite,
+    OpenReleasePage,
+    #[cfg(unix)]
+    EnableAutostart,
     CopyText(String),
     ExcludeErrorPath(String),
     AskDelete(String),
@@ -1050,6 +1053,41 @@ impl App {
                     self.notice = "Preferința de limbă nu a putut fi salvată.".into();
                     self.error = true;
                 }
+            }
+            Message::OpenReleasePage => {
+                if let Some(Ok(Some(update))) = &self.update_result
+                    && let Err(error) = open_site(&update.page_url)
+                {
+                    self.update_error = Some(error);
+                }
+            }
+            #[cfg(unix)]
+            Message::EnableAutostart => {
+                if self.busy || self.state.active.is_some() {
+                    return Task::none();
+                }
+                self.busy = true;
+                return Task::perform(
+                    async {
+                        let script = std::env::current_exe()
+                            .map_err(|e| e.to_string())?
+                            .with_file_name("enable-autostart.sh");
+                        let output = tokio::process::Command::new("/bin/bash")
+                            .arg(script)
+                            .output()
+                            .await
+                            .map_err(|e| e.to_string())?;
+                        if output.status.success() {
+                            Ok(())
+                        } else {
+                            Err(String::from_utf8_lossy(&output.stderr)
+                                .chars()
+                                .take(2000)
+                                .collect())
+                        }
+                    },
+                    Message::AgentStarted,
+                );
             }
             Message::OpenProductSite => {
                 if let Err(e) = open_site("https://strajabackup.com/") {
@@ -1870,7 +1908,7 @@ impl App {
                 text(if cfg!(windows) {
                     "BACKUP PENTRU WINDOWS"
                 } else {
-                    "BACKUP FOR YOUR FILES"
+                    "BACKUP PENTRU FIȘIERELE TALE"
                 })
                 .size(11)
                 .color(MUTED),
@@ -2379,9 +2417,13 @@ impl App {
             );
             if p.mode != BackupMode::Encrypted {
                 body = body.push(
-                    button(text("Deschide copiile în Explorer"))
-                        .style(button::text)
-                        .on_press(Message::OpenFolder(p.repository.clone())),
+                    button(text(if cfg!(windows) {
+                        "Deschide copiile în Explorer"
+                    } else {
+                        "Deschide folderul de backup"
+                    }))
+                    .style(button::text)
+                    .on_press(Message::OpenFolder(p.repository.clone())),
                 );
             }
         }
@@ -2610,14 +2652,15 @@ impl App {
                     .spacing(10),
                 );
             } else {
-                content = content.push(text("Această versiune nu are încă un instalator verificabil pentru actualizare automată."));
+                content = content.push(text(if cfg!(windows) { "Această versiune nu are încă un instalator verificabil pentru actualizare automată." } else { "Instalează pachetul pentru sistemul tău din pagina versiunii. Așteaptă terminarea backupurilor înainte de actualizare." }))
+                    .push(button(text("Deschide pagina versiunii")).on_press(Message::OpenReleasePage));
             }
             if details && !update.notes.is_empty() {
                 content = content.push(scrollable(raw_text(&update.notes).size(14)).height(180));
             }
         }
         if details {
-            content = content.push(text("Verificare automată la pornire și la fiecare 24 de ore. Descarcă și instalează direct din aplicație, când alegi tu.").size(13));
+            content = content.push(text(if cfg!(windows) { "Verificare automată la pornire și la fiecare 24 de ore. Descarcă și instalează direct din aplicație, când alegi tu." } else { "Verificare automată la pornire și la fiecare 24 de ore. Vei fi notificat când apare un pachet nou pentru sistemul tău." }).size(13));
             content = content.push(
                 raw_text(format!(
                     "GitHub: {} · v{}",
@@ -2646,7 +2689,7 @@ impl App {
         card(content)
     }
     fn about(&self) -> Element<'_, Message> {
-        card(column![
+        let content = column![
             self.update_card(true),
             creator_logo(301.0),
             button(text("Vizitează strajabackup.com")).style(button::text).on_press(Message::OpenProductSite),
@@ -2656,10 +2699,17 @@ impl App {
             text("Straja Backup este un proiect open-source, sub licență MIT. Interfața și agentul sunt scrise în Rust; Restic creează și verifică depozitele criptate.").size(16),
             horizontal_rule(1),
             text("Două moduri de rulare").size(19),
-            text(if cfg!(windows) { "Agent în fundal: îl pornești din aplicație și continuă după închiderea ferestrei, până la oprirea Windows.\nServiciu Windows: pornește automat cu sistemul, sub același cont Windows. Instalarea este descrisă în README și scripts\\install-service.ps1." } else { "The background agent continues after you close this window. See the included platform guide to enable automatic startup at login with systemd or launchd." }).size(14),
-            text(if cfg!(windows) { "Parolele sunt protejate prin Windows DPAPI pentru contul tău. Păstrează separat parola fiecărui depozit: ea este necesară pentru recuperare pe alt PC." } else { "Passwords are protected with your login keychain. Keep each repository password separately for recovery on another computer." }).size(14),
+            text(if cfg!(windows) { "Agent în fundal: îl pornești din aplicație și continuă după închiderea ferestrei, până la oprirea Windows.\nServiciu Windows: pornește automat cu sistemul, sub același cont Windows. Instalarea este descrisă în README și scripts\\install-service.ps1." } else { "Agentul continuă după închiderea ferestrei. Poți activa pornirea automată la autentificare. Keyring-ul contului trebuie să fie deblocat pentru acces la parole." }).size(14),
+            text(if cfg!(windows) { "Parolele sunt protejate prin Windows DPAPI pentru contul tău. Păstrează separat parola fiecărui depozit: ea este necesară pentru recuperare pe alt PC." } else { "Parolele sunt protejate prin keyring-ul contului. Păstrează separat parola depozitului pentru recuperare pe alt calculator." }).size(14),
             text("Numărul de copii păstrate se configurează în fiecare plan. Copiile vechi se elimină numai după un backup nou reușit și verificat. ZIP, TAR.GZ și 7z sunt arhive necriptate. Restaurarea recuperează întreaga copie selectată. Fișierele blocate sunt raportate; VSS nu este activat în această versiune.").size(14),
-        ].spacing(18))
+        ].spacing(18);
+        #[cfg(unix)]
+        let content = content.push(
+            button(text("Pornește agentul automat la autentificare")).on_press_maybe(
+                (!self.busy && self.state.active.is_none()).then_some(Message::EnableAutostart),
+            ),
+        );
+        card(content)
     }
     fn remote_form<'a>(&'a self, w: &'a Wizard) -> Element<'a, Message> {
         let input = |label: &str, value: &str, field: u8, secret: bool, editable: bool| {
