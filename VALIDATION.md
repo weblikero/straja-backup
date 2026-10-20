@@ -1,5 +1,10 @@
 # Validare — 20 octombrie 2026
 
+### Version numbering — 3.0.5 (2026-10-20)
+
+- The owner requested the numbering baseline 3.0.5 after 0.8.0; the next patch is 3.0.6. This changes package/application/installer versions and current download examples only. Backup engines, data formats, installer identity and update repository remain unchanged.
+- Release gates require the native CI jobs on the exact tagged commit, Windows regression/remote checks and installer lifecycle, artifact digests, and public update discovery from 0.8.0. The native upgrade and Apple signing limitations described below still apply; the new major number does not imply additional platform certification.
+
 ### Native Ubuntu and macOS kits — 0.8.0 (2026-10-20)
 
 - Ported the GUI and per-user agent to Ubuntu x64 and macOS Apple Silicon/Intel. Unix IPC uses a private, owner-only directory, peer UID verification and a held lock to prevent duplicate listeners. Credentials use authenticated AES-256-GCM ciphertext with a wrapping key in Secret Service/Keychain; there is no plaintext fallback. Unix path matching preserves case, and plain/archive readers reject symlinks and special files.

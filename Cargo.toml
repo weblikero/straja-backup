@@ -1,6 +1,6 @@
 [package]
 name = "straja-backup"
-version = "0.8.0"
+version = "3.0.5"
 authors = ["Weblike PRO"]
 homepage = "https://strajabackup.com/"
 edition = "2024"

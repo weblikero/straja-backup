@@ -7,7 +7,7 @@ not bootable system images. All seven interface languages are included.
 
 Install the `.deb` with the Software installer or:
 
-    sudo apt install ./StrajaBackup-0.8.0-ubuntu-x64.deb
+    sudo apt install ./StrajaBackup-3.0.5-ubuntu-x64.deb
 
 Open **Straja Backup** from Applications. Click **Start agent** if disconnected.
 The portable `.tar.gz` contains the same binaries; extract it before running `straja`.

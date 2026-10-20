@@ -17,6 +17,12 @@ The tray and service do not independently check for updates; open the interface 
 
 ## Prepare a version
 
+The owner selected **3.0.5** as the new numbering baseline on 2026-10-20.
+It follows 0.8.0 without a feature or data-format change. Continue with **3.0.6**
+for the next patch release, then 3.0.7, and use normal SemVer increments for
+later feature/breaking releases. Do not resume the old 0.x sequence or replace
+the previously published 0.8.0 artifacts.
+
 1. Update the package version in `Cargo.toml`, regenerate `Cargo.lock`, and update the guides and installer test default. Keep GUI and agent versions identical.
 2. Run `scripts/test.ps1`, `scripts/test-remote.ps1`, Clippy and formatting checks. Build with `scripts/package.ps1`. Test the actual installer lifecycle on a disposable Windows account before distributing an installer. See `REMOTE.md` for the isolated remote test prerequisites and real-account validation limitations.
 3. Package the entire `dist/StrajaBackup` folder as `dist/StrajaBackup-X.Y.Z-windows-x64-portable.zip`. Include notices and dependency licenses. Generate a SHA-256 sidecar using the same filename plus `.sha256`.
