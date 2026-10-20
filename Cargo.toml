@@ -27,7 +27,7 @@ ui-preview = ["gui"]
 [dependencies]
 anyhow = "1"
 chrono = { version = "0.4", features = ["serde"] }
-iced = { version = "0.14", default-features = false, features = ["wgpu", "tiny-skia", "tokio", "advanced", "svg"], optional = true }
+iced = { version = "0.14", default-features = false, features = ["wgpu", "tiny-skia", "tokio", "advanced", "svg", "x11", "wayland"], optional = true }
 rfd = { version = "0.15", optional = true }
 rusqlite = { version = "0.38", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
