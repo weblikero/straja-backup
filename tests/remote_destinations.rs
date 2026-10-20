@@ -88,9 +88,10 @@ fn credentials_are_protected_and_edits_preserve_remote_identity() -> Result<()> 
 #[ignore = "Uses bundled Restic and Rclone with an isolated loopback FTP server"]
 async fn ftp_backup_restore_retention_and_failure_preserve_other_files() -> Result<()> {
     let live = std::sync::Arc::new(std::sync::Mutex::new(Some(Progress::default())));
+    let temp = tempfile::tempdir()?;
+    let diagnostic = temp.path().join("rclone-client.log");
     let result = tokio::time::timeout(Duration::from_secs(180), async {
         let tools = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".tools");
-        let temp = tempfile::tempdir()?;
         let server_root = temp.path().join("server");
         std::fs::create_dir(&server_root)?;
         std::fs::write(server_root.join("unrelated.txt"), b"untouched")?;
@@ -143,6 +144,24 @@ async fn ftp_backup_restore_retention_and_failure_preserve_other_files() -> Resu
             straja::platform::executable("restic"),
             straja::platform::executable("rclone"),
         ] {
+            #[cfg(unix)]
+            if name == "rclone" {
+                use std::os::unix::fs::PermissionsExt;
+                let quote = |path: &std::path::Path| {
+                    format!("'{}'", path.to_string_lossy().replace('\'', "'\"'\"'"))
+                };
+                let wrapper = binaries.join(name);
+                std::fs::write(
+                    &wrapper,
+                    format!(
+                        "#!/bin/sh\nexec {} --log-level DEBUG --log-file {} \"$@\"\n",
+                        quote(&tools.join(name)),
+                        quote(&diagnostic)
+                    ),
+                )?;
+                std::fs::set_permissions(wrapper, std::fs::Permissions::from_mode(0o755))?;
+                continue;
+            }
             std::fs::hard_link(tools.join(name), binaries.join(name))?;
         }
         let engine = Engine {
@@ -204,6 +223,11 @@ async fn ftp_backup_restore_retention_and_failure_preserve_other_files() -> Resu
     .await;
     if result.is_err() {
         eprintln!("FTP timed out at: {:?}", live.lock().unwrap());
+        if let Ok(log) = std::fs::read_to_string(&diagnostic) {
+            let mut lines: Vec<_> = log.lines().rev().take(150).collect();
+            lines.reverse();
+            eprintln!("Isolated FTP diagnostic:\n{}", lines.join("\n"));
+        }
     }
     result?
 }
