@@ -48,12 +48,7 @@ impl<W: Write> Write for BudgetWriter<W> {
 }
 
 pub(crate) fn read<T: DeserializeOwned>(path: &Path, limit: u64) -> Result<T> {
-    use std::os::windows::fs::OpenOptionsExt;
-    let file = OpenOptions::new()
-        .read(true)
-        .share_mode(1)
-        .custom_flags(0x00200000)
-        .open(path)?;
+    let file = crate::platform::open_read(path)?;
     let meta = file.metadata()?;
     crate::plain::not_link(&meta, path)?;
     ensure!(meta.is_file() && meta.len() <= limit, LIMIT_ERROR);

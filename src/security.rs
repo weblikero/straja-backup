@@ -133,6 +133,7 @@ pub fn data_dir() -> Result<PathBuf> {
         .filter(|p| p.is_absolute())
         .unwrap_or_else(|| PathBuf::from(home).join(".local/share"))
         .join("straja-backup");
+    crate::unix_security::private_directory(&path)?;
     Ok(path)
 }
 #[cfg(unix)]

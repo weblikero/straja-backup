@@ -10,17 +10,26 @@ base="$(cd "$(dirname "$0")" && pwd)"
 if [[ "$(uname -s)" == Darwin ]]; then
   plist="$HOME/Library/LaunchAgents/com.weblike.straja-backup.plist"
   mkdir -p "$(dirname "$plist")"
-  python3 - "$base" "$plist" <<'PY'
-import plistlib,sys
-from pathlib import Path
-base, target = sys.argv[1:]
-with open(target, "wb") as f:
-    plistlib.dump({"Label":"com.weblike.straja-backup",
-                  "ProgramArguments":[str(Path(base)/"straja-agent")],
-                  "RunAtLoad":True, "KeepAlive":{"SuccessfulExit":False},
-                  "ProcessType":"Background","Nice":10}, f)
-PY
-  launchctl bootstrap "gui/$(id -u)" "$plist"
+  escaped="$(printf '%s' "$base/straja-agent" | sed 's/\&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g;')"
+  cat > "$plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>com.weblike.straja-backup</string>
+<key>ProgramArguments</key><array><string>$escaped</string></array>
+<key>RunAtLoad</key><true/>
+<key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+<key>ProcessType</key><string>Background</string>
+<key>Nice</key><integer>10</integer>
+</dict></plist>
+EOF
+  chmod 600 "$plist"
+  plutil -lint "$plist"
+  if launchctl print "gui/$(id -u)/com.weblike.straja-backup" >/dev/null 2>&1; then
+    launchctl kickstart "gui/$(id -u)/com.weblike.straja-backup"
+  else
+    launchctl bootstrap "gui/$(id -u)" "$plist"
+  fi
 else
   mkdir -p "$HOME/.config/systemd/user"
   # Installation paths with newlines/quotes/% require systemd escaping; refuse them.
