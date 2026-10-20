@@ -23,4 +23,7 @@ fi
 cargo test --locked --all-targets --no-fail-fast
 cargo test --locked --test restic_roundtrip -- --ignored
 cargo test --locked --test selected_exclusions selected_exclusions_restic -- --ignored
-cargo test --locked --test remote_destinations ftp_backup_restore_retention_and_failure_preserve_other_files -- --ignored
+for attempt in 1 2 3; do
+  echo "FTP liveness and roundtrip regression: $attempt/3"
+  cargo test --locked --test remote_destinations ftp_backup_restore_retention_and_failure_preserve_other_files -- --ignored
+done

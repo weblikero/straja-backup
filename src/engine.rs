@@ -90,6 +90,9 @@ impl Engine {
             );
             // The option is first parsed as CSV by Restic, then as command words.
             cmd.args(["-o", &format!("\"{}\"", program.replace('"', "\"\""))]);
+            // Bound server requests separately from rclone's bulk-copy flags,
+            // leaving FTP pool headroom for nested metadata calls.
+            cmd.args(["-o", "rclone.connections=2"]);
             format!("rclone:{}", remote.root(&plan.id)?)
         } else {
             plan.repository.to_string_lossy().into_owned()

@@ -321,7 +321,9 @@ pub async fn configure(
                     "RCLONE_CONFIG_STRAJA_EXPLICIT_TLS",
                     if d.ftp_tls { "true" } else { "false" },
                 )
-                .env("RCLONE_CONFIG_STRAJA_CONCURRENCY", "2");
+                // FTP metadata needs headroom while transfers hold connections.
+                // Keep the pool above the 2 transfers + 2 checkers budget.
+                .env("RCLONE_CONFIG_STRAJA_CONCURRENCY", "5");
         }
         Provider::S3 => {
             cmd.env("RCLONE_CONFIG_STRAJA_PROVIDER", "AWS")
