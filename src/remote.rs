@@ -321,9 +321,10 @@ pub async fn configure(
                     "RCLONE_CONFIG_STRAJA_EXPLICIT_TLS",
                     if d.ftp_tls { "true" } else { "false" },
                 )
-                // FTP metadata needs headroom while transfers hold connections.
-                // Keep the pool above the 2 transfers + 2 checkers budget.
-                .env("RCLONE_CONFIG_STRAJA_CONCURRENCY", "5");
+                // A fixed FTP pool cap can deadlock nested metadata requests.
+                // Bound work using transfers/checkers and rclone.connections;
+                // retain rclone's default uncapped internal connection pool.
+                .env("RCLONE_CONFIG_STRAJA_CONCURRENCY", "0");
         }
         Provider::S3 => {
             cmd.env("RCLONE_CONFIG_STRAJA_PROVIDER", "AWS")

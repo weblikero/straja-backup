@@ -87,7 +87,8 @@ fn credentials_are_protected_and_edits_preserve_remote_identity() -> Result<()> 
 #[tokio::test]
 #[ignore = "Uses bundled Restic and Rclone with an isolated loopback FTP server"]
 async fn ftp_backup_restore_retention_and_failure_preserve_other_files() -> Result<()> {
-    tokio::time::timeout(Duration::from_secs(180), async {
+    let live = std::sync::Arc::new(std::sync::Mutex::new(Some(Progress::default())));
+    let result = tokio::time::timeout(Duration::from_secs(180), async {
         let tools = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".tools");
         let temp = tempfile::tempdir()?;
         let server_root = temp.path().join("server");
@@ -147,7 +148,7 @@ async fn ftp_backup_restore_retention_and_failure_preserve_other_files() -> Resu
         let engine = Engine {
             binary: binaries.join(straja::platform::executable("restic")),
             store: store.clone(),
-            live: Default::default(),
+            live: live.clone(),
         };
         eprintln!("FTP: first backup");
         assert_eq!(engine.backup(&plan).await?.0, "Reușit");
@@ -200,7 +201,11 @@ async fn ftp_backup_restore_retention_and_failure_preserve_other_files() -> Resu
         server.wait().await?;
         Ok::<_, anyhow::Error>(())
     })
-    .await?
+    .await;
+    if result.is_err() {
+        eprintln!("FTP timed out at: {:?}", live.lock().unwrap());
+    }
+    result?
 }
 
 #[tokio::test]
