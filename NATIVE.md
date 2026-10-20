@@ -40,7 +40,7 @@ in System Settings. Grant only the access needed for your selected sources.
 
 Optional startup at login: use **About → Start agent automatically at login**, or run after installation:
 
-    "/Applications/Straja Backup.app/Contents/MacOS/enable-autostart.sh"
+    "/Applications/Straja Backup.app/Contents/Resources/enable-autostart.sh"
 
 This creates a LaunchAgent for the current user. To disable it:
 

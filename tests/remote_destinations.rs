@@ -149,16 +149,20 @@ async fn ftp_backup_restore_retention_and_failure_preserve_other_files() -> Resu
             store: store.clone(),
             live: Default::default(),
         };
+        eprintln!("FTP: first backup");
         assert_eq!(engine.backup(&plan).await?.0, "Reușit");
         store.finish_backup(&plan.id, true)?;
         std::fs::write(source.join("data.txt"), b"second version")?;
         let plan = store.plan(&plan.id)?;
+        eprintln!("FTP: second backup and retention");
         assert_eq!(engine.backup(&plan).await?.0, "Reușit");
         let snapshots = engine.snapshots(&plan).await?;
         assert_eq!(snapshots.len(), 1);
+        eprintln!("FTP: integrity check");
         engine.check(&plan).await?;
         let restore = temp.path().join("restore");
         std::fs::create_dir(&restore)?;
+        eprintln!("FTP: restore");
         engine.restore(&plan, &snapshots[0].id, &restore).await?;
         let restored_root = std::fs::read_dir(&restore)?.next().unwrap()?.path();
         assert_eq!(
@@ -171,6 +175,7 @@ async fn ftp_backup_restore_retention_and_failure_preserve_other_files() -> Resu
         );
         let mut wrong = plan.clone();
         wrong.remote.as_mut().unwrap().port = 1;
+        eprintln!("FTP: reject unavailable destination");
         assert!(engine.backup(&wrong).await.is_err());
         assert_eq!(engine.snapshots(&plan).await?.len(), 1);
         let unsafe_plan = store.add(draft(source, target(port)))?;
@@ -179,6 +184,7 @@ async fn ftp_backup_restore_retention_and_failure_preserve_other_files() -> Resu
             .join(format!("plan-{}", unsafe_plan.id));
         std::fs::create_dir_all(&unsafe_root)?;
         std::fs::write(unsafe_root.join("unrelated.txt"), b"keep")?;
+        eprintln!("FTP: preserve unrelated destination files");
         assert!(engine.backup(&unsafe_plan).await.is_err());
         assert_eq!(std::fs::read(unsafe_root.join("unrelated.txt"))?, b"keep");
         assert!(!unsafe_root.join("config").exists());

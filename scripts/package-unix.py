@@ -120,6 +120,11 @@ with tempfile.TemporaryDirectory(prefix="straja-package-") as temp:
         copy_payload(payload)
         resources = app / "Contents/Resources"
         resources.mkdir(parents=True)
+        # macOS reserves MacOS/ for native code. Documents and shell helpers
+        # are sealed resources, not nested executable code objects.
+        for path in list(payload.iterdir()):
+            if path.name not in ("straja", "straja-agent", "restic", "rclone"):
+                shutil.move(str(path), str(resources / path.name))
         png = stage / "icon.png"
         png_from_rgba(png)
         iconset = stage / "Straja.iconset"
@@ -138,7 +143,7 @@ with tempfile.TemporaryDirectory(prefix="straja-package-") as temp:
                 "LSMinimumSystemVersion": "14.0", "NSHighResolutionCapable": True,
             }, f)
         # Ad-hoc signatures allow native execution on Apple Silicon. This is NOT Developer ID signing.
-        for name in ("restic", "rclone", "straja-agent", "straja"):
+        for name in ("restic", "rclone", "straja-agent"):
             subprocess.run(["codesign", "--force", "--sign", "-", str(payload / name)], check=True)
         subprocess.run(["codesign", "--force", "--sign", "-", str(app)], check=True)
         subprocess.run(["codesign", "--verify", "--deep", "--strict", str(app)], check=True)

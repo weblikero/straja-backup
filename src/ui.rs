@@ -1072,6 +1072,8 @@ impl App {
                         let script = std::env::current_exe()
                             .map_err(|e| e.to_string())?
                             .with_file_name("enable-autostart.sh");
+                        #[cfg(target_os = "macos")]
+                        let script = script.with_file_name("../Resources/enable-autostart.sh");
                         let output = tokio::process::Command::new("/bin/bash")
                             .arg(script)
                             .output()

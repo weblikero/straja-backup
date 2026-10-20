@@ -6,6 +6,9 @@ if [[ "$(id -u)" == 0 ]]; then
   exit 1
 fi
 base="$(cd "$(dirname "$0")" && pwd)"
+if [[ "$(uname -s)" == Darwin ]]; then
+  base="$(cd "$base/../MacOS" && pwd)"
+fi
 "$base/straja-agent" --stop-if-idle
 if [[ "$(uname -s)" == Darwin ]]; then
   plist="$HOME/Library/LaunchAgents/com.weblike.straja-backup.plist"
