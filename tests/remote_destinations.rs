@@ -112,7 +112,10 @@ async fn ftp_backup_restore_retention_and_failure_preserve_other_files() -> Resu
                 "--pass",
                 "ftp-test-canary-secret",
                 "--dir-cache-time",
-                "0s",
+                // Zero makes the VFS cleanup timer rearm immediately while
+                // virtual entries exist (rclone vfs/dir.go ForgetAll), starving
+                // the disposable server on Unix. Production is an FTP client.
+                "1s",
                 "--config",
                 straja::platform::NULL_DEVICE,
             ])
@@ -204,6 +207,8 @@ async fn ftp_backup_restore_retention_and_failure_preserve_other_files() -> Resu
             .join(format!("plan-{}", unsafe_plan.id));
         std::fs::create_dir_all(&unsafe_root)?;
         std::fs::write(unsafe_root.join("unrelated.txt"), b"keep")?;
+        // This fixture mutation bypasses FTP/VFS; let its directory cache expire.
+        tokio::time::sleep(Duration::from_millis(1100)).await;
         eprintln!("FTP: preserve unrelated destination files");
         assert!(engine.backup(&unsafe_plan).await.is_err());
         assert_eq!(std::fs::read(unsafe_root.join("unrelated.txt"))?, b"keep");

@@ -12,6 +12,19 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Create and push the version tag first.' }
     $headCommit = git rev-parse HEAD
     if ($LASTEXITCODE -ne 0 -or $tagCommit -ne $headCommit) { throw 'The version tag must point to HEAD.' }
+    if ([version]$version -ge [version]'0.8.0') {
+        $runsJson = & gh run list --repo weblikero/straja-backup --workflow native.yml --commit $headCommit --status success --limit 10 --json databaseId,headSha
+        if ($LASTEXITCODE -ne 0) { throw 'Cannot verify native release validation.' }
+        $runs = @(($runsJson -join "`n") | ConvertFrom-Json | Where-Object { $_.headSha -eq $headCommit })
+        if ($runs.Count -eq 0) { throw 'Ubuntu and both macOS kits must pass native CI on this exact commit before release.' }
+        $runJson = & gh run view $runs[0].databaseId --repo weblikero/straja-backup --json jobs
+        if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect native validation jobs.' }
+        $nativeRun = ($runJson -join "`n") | ConvertFrom-Json
+        foreach ($name in @('native (ubuntu-22.04)', 'native (macos-14)', 'native (macos-15-intel)')) {
+            $jobs = @($nativeRun.jobs | Where-Object { $_.name -eq $name -and $_.conclusion -eq 'success' })
+            if ($jobs.Count -ne 1) { throw "Missing successful native validation: $name" }
+        }
+    }
     $portable = "dist\StrajaBackup-$version-windows-x64-portable.zip"
     $artifacts = @($portable)
     if (!$PortableOnly) { $artifacts += "dist\installer\StrajaBackup-$version-windows-x64-setup.exe" }
