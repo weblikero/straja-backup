@@ -24,7 +24,7 @@ stop_agent() {
   wait "$agent"
 }
 if [[ "$(uname -s)" == Linux ]]; then
-  sudo dpkg -i dist/native/*.deb
+  sudo apt-get install -y ./dist/native/*.deb
   /opt/straja-backup/straja --version
   /opt/straja-backup/straja-agent --version
   /opt/straja-backup/restic version

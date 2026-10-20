@@ -106,7 +106,7 @@ with tempfile.TemporaryDirectory(prefix="straja-package-") as temp:
         (control / "control").write_text(
             f"Package: straja-backup\nVersion: {VERSION}\nArchitecture: {'arm64' if ARM else 'amd64'}\n"
             "Maintainer: Weblike PRO\nSection: utils\nPriority: optional\n"
-            "Depends: libc6 (>= 2.35), libgcc-s1, libdbus-1-3, libxkbcommon0, libwayland-client0, libx11-6, libegl1, xdg-utils\n"
+            "Depends: libc6 (>= 2.35), libgcc-s1, libdbus-1-3, libxkbcommon0, libxkbcommon-x11-0, libwayland-client0, libx11-6, libxcursor1, libxi6, libxrandr2, libegl1, xdg-utils\n"
             "Recommends: gnome-keyring\nHomepage: https://strajabackup.com\n"
             "Description: Straja Backup desktop application and background agent\n"
             " Local and cloud backups with schedules, exclusions, retention and restore.\n")
