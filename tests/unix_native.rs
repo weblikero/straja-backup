@@ -39,6 +39,27 @@ async fn call(path: &Path, value: Request) -> Result<Response> {
     protocol::read(&mut stream).await
 }
 
+#[test]
+fn overlapping_directories_are_rejected_through_filesystem_aliases() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let source = temp.path().join("CaseRoot");
+    let destination = source.join("backup");
+    std::fs::create_dir_all(&destination)?;
+    let alias = temp.path().join("alias");
+    std::os::unix::fs::symlink(&source, &alias)?;
+    assert!(overlaps(&alias, &destination));
+    assert!(overlaps(&destination, &alias));
+    let different_case = temp.path().join("caseroot");
+    if different_case.exists() {
+        assert!(overlaps(&different_case, &destination));
+        assert!(overlaps(&destination, &different_case));
+    }
+    let unrelated = temp.path().join("unrelated");
+    std::fs::create_dir(&unrelated)?;
+    assert!(!overlaps(&source, &unrelated));
+    Ok(())
+}
+
 #[tokio::test]
 async fn unix_agent_runs_backup_preserves_state_and_prevents_duplicate_listener() -> Result<()> {
     let temp = tempfile::tempdir()?;

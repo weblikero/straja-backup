@@ -217,7 +217,22 @@ pub fn overlaps(a: &Path, b: &Path) -> bool {
 
 #[cfg(unix)]
 pub fn overlaps(a: &Path, b: &Path) -> bool {
-    a.starts_with(b) || b.starts_with(a)
+    use std::os::unix::fs::MetadataExt;
+    if a.starts_with(b) || b.starts_with(a) {
+        return true;
+    }
+    // macOS volumes may ignore case. Compare directory identities as well as
+    // text so a differently cased path cannot put the destination in a source.
+    let contains = |child: &Path, parent: &Path| {
+        let Ok(parent) = std::fs::metadata(parent) else {
+            return false;
+        };
+        child.ancestors().any(|path| {
+            std::fs::metadata(path)
+                .is_ok_and(|m| m.dev() == parent.dev() && m.ino() == parent.ino())
+        })
+    };
+    contains(a, b) || contains(b, a)
 }
 
 impl NewPlan {
