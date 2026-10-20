@@ -3,6 +3,15 @@
 Source repository and update channel: https://github.com/weblikero/straja-backup.
 The product portal is https://strajabackup.com/. Other applications on that site must use their own repositories and update channels.
 
+## Code signing policy
+
+See [CODE_SIGNING.md](CODE_SIGNING.md), [PRIVACY.md](PRIVACY.md) and the
+[SignPath preparation checklist](SIGNPATH_APPLICATION.md). Signing is not yet
+enabled. Link the code signing policy and privacy policy in future release notes
+and download pages. Do not claim SignPath sponsorship before acceptance or label
+an unsigned release as signed. Signing changes file hashes: once configured,
+sign before calculating final checksums and uploading release assets.
+
 ## What installed clients do
 
 Starting with 0.4.1, the desktop interface checks the public GitHub Releases API at startup and every 24 hours while open. A successful result is cached per Windows account for 24 hours. About includes a manual check, with a one-minute cooldown. No GitHub account or token is needed on users' PCs. Requests contain the application version in the User-Agent, not backup paths, plans, passwords or history. GitHub receives the normal network request, including the public IP address.

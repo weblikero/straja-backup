@@ -8,6 +8,10 @@ package upgrades after an in-app notification; macOS packages are not Developer 
 
 Open-source backup and restore for Windows, Ubuntu and macOS, created by [Weblike PRO](https://weblike.ro/). Licensed under MIT. Product website: [strajabackup.com](https://strajabackup.com/).
 
+[Code signing policy](CODE_SIGNING.md) · [Desktop privacy policy](PRIVACY.md).
+Windows releases through 3.0.5 are unsigned. SignPath onboarding is being prepared;
+the project has not yet been accepted or signed by SignPath Foundation.
+
 Version **3.0.5** is a preview for Windows x64 (Windows 10 version 1809 or later, including Windows 11). The desktop app and background agent are written in Rust. Encrypted backups use the bundled Restic 0.19.1. Ordinary files and ZIP, TAR.GZ and 7z archives do not require Restic or a separate archive utility.
 
 Online destinations now include FTP/explicit FTPS, Google Drive, Dropbox and Amazon S3 for encrypted incremental backups. Connect accounts in the destination step; provider credentials are protected with Windows DPAPI. Rclone 1.75.2 is bundled. See [Online destinations](REMOTE.md) for setup, transfer limits and validation limitations.
@@ -120,6 +124,6 @@ A debug build supports `straja.exe --preview` (or `--preview-updates --preview-u
 
 ## Scope
 
-This preview supports local and accessible network folders. It does not yet provide cloud-provider integrations, backup of NTFS ACLs/alternate data streams, automatic junction traversal, format conversion, or selective restore through the app. Use the original source files for production work, and periodically test recovery from your backups.
+This preview supports local/network folders and the online destinations described in [REMOTE.md](REMOTE.md). It does not yet provide backup of NTFS ACLs/alternate data streams, automatic junction traversal, format conversion, or selective restore through the app. Use the original source files for production work, and periodically test recovery from your backups.
 
 The earlier Romanian guide is available as `README.ro.md`.
