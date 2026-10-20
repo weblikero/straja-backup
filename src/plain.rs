@@ -102,7 +102,7 @@ pub fn exclusions(patterns: &[String]) -> Result<GlobSet> {
         let pattern = pattern.replace('\\', "/");
         set.add(
             GlobBuilder::new(&pattern)
-                .case_insensitive(true)
+                .case_insensitive(cfg!(windows))
                 .backslash_escape(false)
                 .build()
                 .with_context(|| format!("Excludere nevalidă: {pattern}"))?,
@@ -112,10 +112,17 @@ pub fn exclusions(patterns: &[String]) -> Result<GlobSet> {
 }
 
 pub(crate) fn not_link(meta: &std::fs::Metadata, path: &Path) -> Result<()> {
+    #[cfg(windows)]
     use std::os::windows::fs::MetadataExt;
+    #[cfg(windows)]
     ensure!(
         meta.file_attributes() & 0x400 == 0,
         "Legătură/junction/reparse point neacceptat: {}. Alege folderul real sau exclude legătura.",
+        path.display()
+    );
+    ensure!(
+        !meta.file_type().is_symlink(),
+        "Symbolic link is not supported: {}. Exclude the link or choose its real target.",
         path.display()
     );
     ensure!(
@@ -181,7 +188,7 @@ fn validate_manifest(m: &Manifest, plan: &Plan, id: &str) -> Result<()> {
             );
         }
         ensure!(
-            seen.insert(entry.path.to_string_lossy().to_lowercase()),
+            seen.insert(crate::platform::path_key(&entry.path)),
             "Cale duplicată în manifest."
         );
         ensure!(
@@ -251,19 +258,12 @@ async fn copy_file(
     buffer: &mut [u8],
 ) -> Result<(String, u64, DateTime<Utc>)> {
     let (files_done, bytes_done, total) = completed;
-    use std::os::windows::fs::OpenOptionsExt;
-    // Deny writers/deletion for this read and reject reparse points on the opened handle.
-    let input = std::fs::OpenOptions::new()
-        .read(true)
-        .share_mode(1)
-        .custom_flags(0x00200000)
-        .open(from)
-        .with_context(|| {
-            format!(
-                "Fișierul nu poate fi citit (posibil blocat): {}",
-                logical.display()
-            )
-        })?;
+    let input = crate::platform::open_read(from).with_context(|| {
+        format!(
+            "Fișierul nu poate fi citit (posibil blocat): {}",
+            logical.display()
+        )
+    })?;
     let before = input.metadata()?;
     not_link(&before, logical)?;
     let modified = before.modified()?;

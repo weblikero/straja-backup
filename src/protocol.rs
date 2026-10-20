@@ -72,7 +72,9 @@ pub async fn write<T: Serialize>(stream: &mut (impl AsyncWrite + Unpin), value: 
 pub async fn call(request: Request) -> Result<Response> {
     tokio::time::timeout(std::time::Duration::from_secs(60), async {
         let name = crate::security::pipe_name()?;
+        #[cfg(windows)]
         let mut attempt = 0;
+        #[cfg(windows)]
         let mut pipe = loop {
             match tokio::net::windows::named_pipe::ClientOptions::new().open(&name) {
                 Ok(pipe) => break pipe,
@@ -85,6 +87,12 @@ pub async fn call(request: Request) -> Result<Response> {
                 ),
             }
         };
+        #[cfg(unix)]
+        let mut pipe = tokio::net::UnixStream::connect(&name)
+            .await
+            .context("The background agent is not connected. Start it from Straja.")?;
+        #[cfg(unix)]
+        crate::unix_transport::verify_peer(&pipe)?;
         write(&mut pipe, &request).await?;
         read(&mut pipe).await
     })

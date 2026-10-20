@@ -9,7 +9,9 @@ use straja::{engine::Engine, model::*, store::Store};
 #[ignore = "Requires the verified Restic executable; run scripts/test.ps1"]
 async fn real_backup_incremental_history_restore_and_integrity() -> Result<()> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let binary = root.join(".tools/restic.exe");
+    let binary = root
+        .join(".tools")
+        .join(straja::platform::executable("restic"));
     anyhow::ensure!(binary.is_file(), "Run scripts/get-restic.ps1 first");
     let temp = tempfile::tempdir()?;
     let source = temp.path().join("Documente cu spații și diacritice");
@@ -113,19 +115,23 @@ async fn real_backup_incremental_history_restore_and_integrity() -> Result<()> {
         engine.snapshots(&wrong).await.is_err(),
         "A wrong password must be rejected"
     );
-    use std::os::windows::fs::OpenOptionsExt;
-    let locked_path = p.sources[0].join("locked.txt");
-    std::fs::write(&locked_path, "locked data")?;
-    let locked = std::fs::OpenOptions::new()
-        .read(true)
-        .share_mode(0)
-        .open(&locked_path)?;
-    assert_eq!(
-        engine.backup(&p).await?.0,
-        "Incomplet",
-        "An unreadable file must never be reported as a successful full backup"
-    );
-    drop(locked);
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        let locked_path = p.sources[0].join("locked.txt");
+        std::fs::write(&locked_path, "locked data")?;
+        let locked = std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(&locked_path)?;
+        assert_eq!(
+            engine.backup(&p).await?.0,
+            "Incomplet",
+            "An unreadable file must never be reported as a successful full backup"
+        );
+        drop(locked);
+    }
+
     let foreign = std::process::Command::new(&engine.binary)
         .arg("--repo")
         .arg(&p.repository)
@@ -143,23 +149,28 @@ async fn real_backup_incremental_history_restore_and_integrity() -> Result<()> {
     // Retention also applies to encrypted plans. Failed/incomplete backups never prune.
     let mut limited = p.clone();
     limited.keep_last = Some(1);
-    let before = engine.snapshots(&limited).await?;
-    std::fs::write(
-        &locked_path,
-        "changed after the foreign snapshot, so Restic must read it again",
-    )?;
-    let locked = std::fs::OpenOptions::new()
-        .read(true)
-        .share_mode(0)
-        .open(&locked_path)?;
-    assert_eq!(engine.backup(&limited).await?.0, "Incomplet");
-    let after_failure = engine.snapshots(&limited).await?;
-    assert!(
-        before
-            .iter()
-            .all(|s| after_failure.iter().any(|a| a.id == s.id))
-    );
-    drop(locked);
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        let locked_path = p.sources[0].join("locked.txt");
+        let before = engine.snapshots(&limited).await?;
+        std::fs::write(
+            &locked_path,
+            "changed after the foreign snapshot, so Restic must read it again",
+        )?;
+        let locked = std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(&locked_path)?;
+        assert_eq!(engine.backup(&limited).await?.0, "Incomplet");
+        let after_failure = engine.snapshots(&limited).await?;
+        assert!(
+            before
+                .iter()
+                .all(|s| after_failure.iter().any(|a| a.id == s.id))
+        );
+        drop(locked);
+    }
     let result = engine.backup(&limited).await?;
     assert_eq!(result.0, "Reușit");
     assert!(!result.1.contains("ATENȚIE"), "{result:?}");

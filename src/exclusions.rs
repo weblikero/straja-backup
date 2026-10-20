@@ -2,6 +2,7 @@
 use anyhow::{Result, ensure};
 use std::path::{Component, Path, PathBuf};
 
+#[cfg(windows)]
 pub fn normalized(path: &Path) -> String {
     let text = path
         .components()
@@ -14,6 +15,15 @@ pub fn normalized(path: &Path) -> String {
         text.strip_prefix("//?/").unwrap_or(&text).to_owned()
     };
     text.trim_end_matches('/').to_lowercase()
+}
+
+#[cfg(unix)]
+pub fn normalized(path: &Path) -> String {
+    path.components()
+        .collect::<PathBuf>()
+        .to_string_lossy()
+        .trim_end_matches('/')
+        .to_owned()
 }
 
 fn under(path: &str, parent: &str) -> bool {

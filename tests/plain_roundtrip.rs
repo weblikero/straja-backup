@@ -182,6 +182,7 @@ async fn mixed_file_sizes_survive_reused_buffers_and_restore() -> Result<()> {
     Ok(())
 }
 
+#[cfg(windows)]
 #[tokio::test]
 async fn locked_source_fails_without_publishing_partial_backup() -> Result<()> {
     use std::os::windows::fs::OpenOptionsExt;

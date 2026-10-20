@@ -52,7 +52,7 @@ impl Engine {
         Ok(std::env::current_exe()?
             .parent()
             .context("Folder executabil inexistent")?
-            .join("restic.exe"))
+            .join(crate::platform::executable("restic")))
     }
     pub fn update(&self, detail: &str) {
         if let Some(p) = self.live.lock().unwrap().as_mut() {
@@ -78,7 +78,9 @@ impl Engine {
         }
         let repository = if let Some(remote) = &plan.remote {
             ensure_remote_mode(plan.mode)?;
-            let rclone = self.binary.with_file_name("rclone.exe");
+            let rclone = self
+                .binary
+                .with_file_name(crate::platform::executable("rclone"));
             let credentials = self.store.remote_secret(&plan.id)?;
             crate::remote::configure(&mut cmd, &rclone, remote, &credentials).await?;
             // Restic parses this option into words; quote a Windows path with spaces.
@@ -211,7 +213,9 @@ impl Engine {
         if let Some(remote) = &plan.remote {
             let credentials = self.store.remote_secret(&plan.id)?;
             let entries = crate::remote::list(
-                &self.binary.with_file_name("rclone.exe"),
+                &self
+                    .binary
+                    .with_file_name(crate::platform::executable("rclone")),
                 remote,
                 &credentials,
                 &plan.id,
@@ -390,7 +394,15 @@ impl Engine {
             args.extend(["--exclude".into(), pattern.clone()]);
         }
         for path in &plan.excluded_paths {
-            args.extend(["--iexclude".into(), crate::exclusions::restic_pattern(path)]);
+            args.extend([
+                if cfg!(windows) {
+                    "--iexclude"
+                } else {
+                    "--exclude"
+                }
+                .into(),
+                crate::exclusions::restic_pattern(path),
+            ]);
         }
         // Prevent recursion into live application secrets/database if a parent folder is selected.
         args.extend([
@@ -525,6 +537,8 @@ pub fn restore_selector(snapshot: &str, paths: &[String]) -> String {
     if normalized.as_bytes().get(1) == Some(&b':') {
         let tree_path = normalized.replace(':', "");
         format!("{snapshot}:/{}", tree_path.trim_matches('/'))
+    } else if cfg!(unix) && common.is_absolute() {
+        format!("{snapshot}:{}", common.display())
     } else {
         snapshot.into()
     }

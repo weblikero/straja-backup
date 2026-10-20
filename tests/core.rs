@@ -161,6 +161,7 @@ fn dst_skips_nonexistent_time_and_avoids_duplicate_fall_back_run() {
     );
 }
 
+#[cfg(windows)]
 #[test]
 fn path_boundaries_do_not_confuse_similar_folder_names() {
     use std::path::Path;

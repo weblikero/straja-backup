@@ -98,8 +98,7 @@ fn evaluate(release: Option<&Release>, installed: &str) -> Result<Option<Update>
         return Err(CheckError::InvalidRelease);
     }
     let base = format!("https://github.com/{REPOSITORY}/releases");
-    let installer = format!("StrajaBackup-{version}-windows-x64-setup.exe");
-    let portable = format!("StrajaBackup-{version}-windows-x64-portable.zip");
+    let (installer, portable) = asset_names(&version.to_string());
     if !release.assets.iter().any(|asset| {
         (asset.name == installer || asset.name == portable)
             && asset.state == "uploaded"
@@ -113,7 +112,8 @@ fn evaluate(release: Option<&Release>, installed: &str) -> Result<Option<Update>
             .assets
             .iter()
             .find(|a| {
-                a.name == installer
+                cfg!(windows)
+                    && a.name == installer
                     && a.state == "uploaded"
                     && a.size > 0
                     && a.size <= MAX_INSTALLER
@@ -138,6 +138,30 @@ fn evaluate(release: Option<&Release>, installed: &str) -> Result<Option<Update>
             .collect(),
         page_url: format!("{base}/tag/{tag}"),
     }))
+}
+
+fn asset_names(version: &str) -> (String, String) {
+    let arch = if cfg!(target_arch = "aarch64") {
+        "arm64"
+    } else {
+        "x64"
+    };
+    if cfg!(target_os = "macos") {
+        (
+            format!("StrajaBackup-{version}-macos-{arch}.dmg"),
+            format!("StrajaBackup-{version}-macos-{arch}.tar.gz"),
+        )
+    } else if cfg!(target_os = "linux") {
+        (
+            format!("StrajaBackup-{version}-ubuntu-{arch}.deb"),
+            format!("StrajaBackup-{version}-linux-{arch}.tar.gz"),
+        )
+    } else {
+        (
+            format!("StrajaBackup-{version}-windows-x64-setup.exe"),
+            format!("StrajaBackup-{version}-windows-x64-portable.zip"),
+        )
+    }
 }
 
 fn valid_hash(hash: &str) -> bool {
@@ -363,6 +387,7 @@ pub async fn check(manual: bool) -> Result<Option<Update>, CheckError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(windows)]
     #[test]
     fn automatic_install_requires_bounded_installer_and_sha256() {
         let mut r = release("v1.0.0");
@@ -497,7 +522,7 @@ mod tests {
     }
     fn release(tag: &str) -> Release {
         let version = tag.trim_start_matches('v');
-        let name = format!("StrajaBackup-{version}-windows-x64-setup.exe");
+        let name = asset_names(version).0;
         Release {
             tag_name: tag.into(),
             draft: false,
@@ -556,7 +581,7 @@ mod tests {
     #[test]
     fn portable_only_release_and_bounded_notes() {
         let mut r = release("v1.0.0");
-        r.assets[0].name = "StrajaBackup-1.0.0-windows-x64-portable.zip".into();
+        r.assets[0].name = asset_names("1.0.0").1;
         r.assets[0].browser_download_url = format!(
             "https://github.com/{REPOSITORY}/releases/download/v1.0.0/{}",
             r.assets[0].name

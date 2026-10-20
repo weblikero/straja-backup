@@ -1,6 +1,6 @@
 [package]
 name = "straja-backup"
-version = "0.7.1"
+version = "0.8.0"
 authors = ["Weblike PRO"]
 homepage = "https://strajabackup.com/"
 edition = "2024"
@@ -43,6 +43,17 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "net",
 uuid = { version = "1", features = ["v4", "serde"] }
 zeroize = "1"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+fs2 = "0.4"
+aes-gcm = "0.10"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3.6.3", features = ["sync-secret-service", "crypto-rust"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3.6.3", features = ["apple-native"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-service = "0.8"

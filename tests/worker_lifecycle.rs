@@ -1,3 +1,4 @@
+#![cfg(windows)]
 use anyhow::Result;
 use chrono::{Duration, Utc};
 use std::{path::PathBuf, time::Duration as StdDuration};

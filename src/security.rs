@@ -1,6 +1,9 @@
-use anyhow::{Context, Result, bail};
+#[cfg(windows)]
+use anyhow::bail;
+use anyhow::{Context, Result};
 use std::path::PathBuf;
 
+#[cfg(windows)]
 pub fn data_dir() -> Result<PathBuf> {
     let root = std::env::var_os("LOCALAPPDATA").context("LOCALAPPDATA nu este definit.")?;
     Ok(PathBuf::from(root).join("StrajaBackup"))
@@ -51,6 +54,7 @@ pub fn user_sid() -> Result<String> {
     }
 }
 
+#[cfg(windows)]
 pub fn pipe_name() -> Result<String> {
     Ok(format!(r"\\.\pipe\StrajaBackup-{}", user_sid()?))
 }
@@ -114,4 +118,27 @@ fn crypt(bytes: &[u8], encrypt: bool) -> Result<Vec<u8>> {
         LocalFree(output.pbData.cast());
         Ok(result)
     }
+}
+
+#[cfg(unix)]
+pub use crate::unix_security::{protect, unprotect};
+#[cfg(unix)]
+pub fn data_dir() -> Result<PathBuf> {
+    let home = std::env::var_os("HOME").context("HOME is not defined")?;
+    #[cfg(target_os = "macos")]
+    let path = PathBuf::from(home).join("Library/Application Support/StrajaBackup");
+    #[cfg(target_os = "linux")]
+    let path = std::env::var_os("XDG_DATA_HOME")
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute())
+        .unwrap_or_else(|| PathBuf::from(home).join(".local/share"))
+        .join("straja-backup");
+    Ok(path)
+}
+#[cfg(unix)]
+pub fn pipe_name() -> Result<String> {
+    Ok(crate::unix_security::socket_path()?
+        .to_str()
+        .context("Invalid socket path")?
+        .into())
 }

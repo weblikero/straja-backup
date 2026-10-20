@@ -17,7 +17,10 @@ fn protect_remote(credentials: &crate::remote::Credentials) -> Result<Vec<u8>> {
 
 impl Store {
     pub fn open(root: &Path) -> Result<Self> {
+        #[cfg(windows)]
         std::fs::create_dir_all(root)?;
+        #[cfg(unix)]
+        crate::unix_security::private_directory(root)?;
         let store = Self {
             root: root.to_path_buf(),
         };

@@ -66,6 +66,7 @@ fn creator_logo(width: f32) -> Element<'static, Message> {
     .into()
 }
 
+#[cfg(windows)]
 fn open_site(address: &str) -> Result<(), String> {
     use windows_sys::Win32::UI::Shell::ShellExecuteW;
     let url: Vec<u16> = address.encode_utf16().chain(Some(0)).collect();
@@ -90,6 +91,7 @@ fn open_site(address: &str) -> Result<(), String> {
     }
 }
 
+#[cfg(windows)]
 fn launch_vss_agent() -> Result<(), String> {
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::UI::Shell::ShellExecuteW;
@@ -120,6 +122,19 @@ fn launch_vss_agent() -> Result<(), String> {
     } else {
         Ok(())
     }
+}
+
+#[cfg(unix)]
+fn open_site(address: &str) -> Result<(), String> {
+    std::process::Command::new(straja::platform::FILE_MANAGER)
+        .arg(address)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+#[cfg(unix)]
+fn launch_vss_agent() -> Result<(), String> {
+    Err(straja::vss::RIGHTS_ERROR.into())
 }
 
 fn app_theme(_: &App) -> Theme {
@@ -1174,7 +1189,7 @@ impl App {
                     if !path.is_dir() {
                         return Err("Folderul nu este disponibil.".into());
                     }
-                    std::process::Command::new("explorer.exe")
+                    std::process::Command::new(straja::platform::FILE_MANAGER)
                         .arg(path)
                         .spawn()
                         .map_err(|e| e.to_string())?;
@@ -1264,9 +1279,12 @@ impl App {
                 return Task::perform(
                     async {
                         let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-                        let mut cmd =
-                            std::process::Command::new(exe.with_file_name("straja-agent.exe"));
+                        let mut cmd = std::process::Command::new(
+                            exe.with_file_name(straja::platform::executable("straja-agent")),
+                        );
+                        #[cfg(windows)]
                         use std::os::windows::process::CommandExt;
+                        #[cfg(windows)]
                         cmd.creation_flags(0x08000000);
                         cmd.stdin(std::process::Stdio::null())
                             .stdout(std::process::Stdio::null())
@@ -1797,9 +1815,17 @@ impl App {
             self.update_error = None;
             return Task::perform(
                 async move {
-                    straja::updater::launch(prepared)
-                        .await
-                        .map_err(|e| format!("{e:#}"))
+                    #[cfg(windows)]
+                    {
+                        straja::updater::launch(prepared)
+                            .await
+                            .map_err(|e| format!("{e:#}"))
+                    }
+                    #[cfg(unix)]
+                    {
+                        let _ = prepared;
+                        Err("Install the native package to update this platform.".to_owned())
+                    }
                 },
                 Message::UpdaterLaunched,
             );
@@ -1841,7 +1867,13 @@ impl App {
         let sidebar = container(
             column![
                 text("STRAJA").size(29).color(BLUE),
-                text("BACKUP PENTRU WINDOWS").size(11).color(MUTED),
+                text(if cfg!(windows) {
+                    "BACKUP PENTRU WINDOWS"
+                } else {
+                    "BACKUP FOR YOUR FILES"
+                })
+                .size(11)
+                .color(MUTED),
                 iced::widget::Space::new().height(28),
                 nav("Privire de ansamblu", Page::Home),
                 nav("Planurile mele", Page::Plans),
@@ -2624,8 +2656,8 @@ impl App {
             text("Straja Backup este un proiect open-source, sub licență MIT. Interfața și agentul sunt scrise în Rust; Restic creează și verifică depozitele criptate.").size(16),
             horizontal_rule(1),
             text("Două moduri de rulare").size(19),
-            text("Agent în fundal: îl pornești din aplicație și continuă după închiderea ferestrei, până la oprirea Windows.\nServiciu Windows: pornește automat cu sistemul, sub același cont Windows. Instalarea este descrisă în README și scripts\\install-service.ps1.").size(14),
-            text("Parolele sunt protejate prin Windows DPAPI pentru contul tău. Păstrează separat parola fiecărui depozit: ea este necesară pentru recuperare pe alt PC.").size(14),
+            text(if cfg!(windows) { "Agent în fundal: îl pornești din aplicație și continuă după închiderea ferestrei, până la oprirea Windows.\nServiciu Windows: pornește automat cu sistemul, sub același cont Windows. Instalarea este descrisă în README și scripts\\install-service.ps1." } else { "The background agent continues after you close this window. See the included platform guide to enable automatic startup at login with systemd or launchd." }).size(14),
+            text(if cfg!(windows) { "Parolele sunt protejate prin Windows DPAPI pentru contul tău. Păstrează separat parola fiecărui depozit: ea este necesară pentru recuperare pe alt PC." } else { "Passwords are protected with your login keychain. Keep each repository password separately for recovery on another computer." }).size(14),
             text("Numărul de copii păstrate se configurează în fiecare plan. Copiile vechi se elimină numai după un backup nou reușit și verificat. ZIP, TAR.GZ și 7z sunt arhive necriptate. Restaurarea recuperează întreaga copie selectată. Fișierele blocate sunt raportate; VSS nu este activat în această versiune.").size(14),
         ].spacing(18))
     }
@@ -2956,10 +2988,12 @@ impl App {
                                 .padding(12),
                         );
                 }
-                content = content
+                if cfg!(windows) {
+                    content = content
                     .push(horizontal_rule(1))
                     .push(checkbox(w.use_vss).label(tr("Backup pentru fișiere în folosință (Windows VSS)")).on_toggle(Message::UseVss))
                     .push(text("VSS necesită agent cu drepturi de administrator și surse pe discuri locale NTFS. Nu include modificările nesalvate și nu înlocuiește backupul nativ al bazelor de date.").size(14).color(MUTED));
+                }
                 if w.use_vss && !self.state.vss_available {
                     content = content.push(self.vss_activation());
                 }
@@ -3356,6 +3390,7 @@ mod tests {
         }
     }
 
+    #[cfg(windows)]
     #[test]
     fn error_path_uses_source_not_partial_destination_and_preserves_literal_names() {
         for path in [
@@ -3398,6 +3433,7 @@ mod tests {
         assert!(backup_error_path(&run).is_none());
     }
 
+    #[cfg(windows)]
     #[test]
     fn error_exclusion_opens_editable_draft_and_preserves_plan_until_saved() {
         let (mut app, _) = App::new();
@@ -3657,6 +3693,7 @@ mod tests {
             assert_eq!(w.retention().unwrap(), Some(7));
         }
     }
+    #[cfg(windows)]
     #[test]
     fn exclusion_picker_validates_deduplicates_and_can_include_again() {
         let (mut app, _) = App::new();
@@ -3678,6 +3715,7 @@ mod tests {
         let _ = app.update(Message::RemoveExclusion(0));
         assert!(app.wizard.as_ref().unwrap().excluded_paths.is_empty());
     }
+    #[cfg(windows)]
     #[test]
     fn manual_exclusion_add_edit_cancel_and_validation() {
         let (mut app, _) = App::new();
@@ -3725,6 +3763,7 @@ mod tests {
         assert!(app.wizard.as_ref().unwrap().exclusion_edit.is_none());
     }
 
+    #[cfg(windows)]
     #[test]
     fn manual_exclusion_edit_tracks_removals_and_preserves_pending_input() {
         let (mut app, _) = App::new();

@@ -4,7 +4,9 @@ use std::{
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
-use straja::{engine::Engine, exclusions, model::*, store::Store};
+#[cfg(windows)]
+use straja::exclusions;
+use straja::{engine::Engine, model::*, store::Store};
 
 fn files(root: &Path) -> Result<Vec<PathBuf>> {
     let mut stack = vec![root.to_path_buf()];
@@ -93,22 +95,28 @@ async fn exercise(mode: BackupMode) -> Result<()> {
         plan.excluded_paths
     );
     let engine = Engine {
-        binary: PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".tools/restic.exe"),
+        binary: PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join(".tools")
+            .join(straja::platform::executable("restic")),
         store,
         live: Arc::new(Mutex::new(None)),
     };
     // Exclusions must be applied before opening locked files, including nested files.
+    #[cfg(windows)]
     use std::os::windows::fs::OpenOptionsExt;
+    #[cfg(windows)]
     let locked = fs::OpenOptions::new()
         .read(true)
         .share_mode(0)
         .open(&excluded_file)?;
+    #[cfg(windows)]
     let locked_nested = fs::OpenOptions::new()
         .read(true)
         .share_mode(0)
         .open(excluded_folder.join("subfolder/secret.txt"))?;
     let result = engine.backup(&plan).await?;
     assert_eq!(result.0, "Reușit", "{mode}: {result:?}");
+    #[cfg(windows)]
     drop((locked, locked_nested));
     let first = engine.snapshots(&plan).await?.remove(0);
     engine.restore(&plan, &first.id, &restore).await?;
@@ -190,6 +198,7 @@ async fn exercise(mode: BackupMode) -> Result<()> {
     Ok(())
 }
 
+#[cfg(windows)]
 #[test]
 fn literal_paths_boundaries_validation_and_legacy_defaults() -> Result<()> {
     let source = PathBuf::from(r"C:\FolderA");

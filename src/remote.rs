@@ -228,7 +228,7 @@ pub fn bundled() -> Result<PathBuf> {
     Ok(std::env::current_exe()?
         .parent()
         .context("Folder executabil inexistent")?
-        .join("rclone.exe"))
+        .join(crate::platform::executable("rclone")))
 }
 fn clean(command: &mut Command) {
     for (key, _) in std::env::vars_os() {
@@ -238,7 +238,7 @@ fn clean(command: &mut Command) {
         }
     }
     command
-        .env("RCLONE_CONFIG", "NUL")
+        .env("RCLONE_CONFIG", crate::platform::NULL_DEVICE)
         .env("RCLONE_TRANSFERS", "2")
         .env("RCLONE_CHECKERS", "2")
         .env("RCLONE_BUFFER_SIZE", "1Mi")
@@ -478,7 +478,7 @@ mod tests {
                     })
                 })
                 .collect();
-            assert_eq!(env["RCLONE_CONFIG"], "NUL");
+            assert_eq!(env["RCLONE_CONFIG"], crate::platform::NULL_DEVICE);
             assert_eq!(env["RCLONE_CONFIG_STRAJA_TYPE"], provider.backend());
             assert_eq!(env["RCLONE_TRANSFERS"], "2");
             assert_eq!(env["RCLONE_BWLIMIT"], "10240k");

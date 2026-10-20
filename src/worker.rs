@@ -11,12 +11,12 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
-use tokio::{
-    net::windows::named_pipe::{NamedPipeServer, ServerOptions},
-    sync::watch,
-    task::JoinSet,
-};
+use tokio::{sync::watch, task::JoinSet};
 
+#[cfg(windows)]
+use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
+
+#[cfg(windows)]
 fn create_pipe(first: bool, name: &str) -> Result<NamedPipeServer> {
     use windows_sys::Win32::{
         Foundation::LocalFree,
@@ -297,7 +297,10 @@ impl Worker {
                 };
                 let id = plan.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
                 crate::remote::list(
-                    &self.engine.binary.with_file_name("rclone.exe"),
+                    &self
+                        .engine
+                        .binary
+                        .with_file_name(crate::platform::executable("rclone")),
                     &destination,
                     &credentials,
                     &id,
@@ -356,7 +359,10 @@ pub async fn run_on_pipe(
     pipe_name: String,
 ) -> Result<()> {
     // Claim the per-user pipe before opening/recovering the database: only one agent may own it.
+    #[cfg(windows)]
     let mut listener = create_pipe(true, &pipe_name)?;
+    #[cfg(unix)]
+    let listener = crate::unix_transport::Listener::bind(&pipe_name)?;
     let store = Store::open(&root)?;
     store.recover_interrupted()?;
     let engine = Engine {
@@ -381,10 +387,17 @@ pub async fn run_on_pipe(
                 }
                 if let Err(e) = worker.schedule_due() { eprintln!("Programare: {e}"); }
             }
-            connection = listener.connect() => {
+            connection = async {
+                #[cfg(windows)] { listener.connect().await }
+                #[cfg(unix)] { listener.accept().await }
+            } => {
+                #[cfg(windows)]
                 connection?;
                 // Keep a listening instance alive while serving the connected client.
+                #[cfg(windows)]
                 let mut pipe = std::mem::replace(&mut listener, create_pipe(false, &pipe_name)?);
+                #[cfg(unix)]
+                let mut pipe = connection?;
                 let request = tokio::time::timeout(Duration::from_secs(3), protocol::read::<Request>(&mut pipe)).await;
                 let response = match request {
                     Ok(Ok(request)) => match worker.handle(request).await { Ok(r) => r, Err(e) => Response::Error(format!("{e:#}")) },

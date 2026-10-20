@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 fn main() -> Result<()> {
     let result = run();
+    #[cfg(windows)]
     if std::env::args().any(|a| a == "--vss-start")
         && let Err(error) = &result
     {
@@ -26,20 +27,42 @@ fn main() -> Result<()> {
 
 fn run() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--version") {
+        println!(
+            "Straja Backup {} ({}/{})",
+            env!("CARGO_PKG_VERSION"),
+            std::env::consts::OS,
+            std::env::consts::ARCH
+        );
+        return Ok(());
+    }
+    #[cfg(windows)]
     if straja::updater::running() && !args.iter().any(|a| a == "--service" || a == "--status") {
         return Ok(());
     }
+    #[cfg(windows)]
     if args.iter().any(|a| a == "--tray") {
         return straja::tray::run();
     }
+    #[cfg(windows)]
     if args.iter().any(|a| a == "--service") {
         return straja::service::dispatch();
+    }
+    #[cfg(unix)]
+    if args
+        .iter()
+        .any(|a| a == "--service" || a == "--tray" || a == "--vss-start")
+    {
+        anyhow::bail!(
+            "Windows-only argument. Use the supplied systemd user service or macOS LaunchAgent."
+        );
     }
     let value = |key| {
         args.windows(2)
             .find(|a| a[0] == key)
             .map(|a| PathBuf::from(&a[1]))
     };
+    #[allow(unused_mut)]
     let mut root = value("--data-dir")
         .map(Ok)
         .unwrap_or_else(straja::security::data_dir)?;
@@ -53,6 +76,7 @@ fn run() -> Result<()> {
     }
     let runtime = straja::resources::runtime()?;
     runtime.block_on(async {
+        #[cfg(windows)]
         if args.iter().any(|a| a == "--vss-start") {
             straja::vss::require_privileges()?;
             let expected = args.windows(2).find(|a| a[0] == "--expected-user-sid").map(|a| a[1].as_str());
@@ -86,6 +110,21 @@ fn run() -> Result<()> {
                 }
             }
         }
+        if args.iter().any(|a| a == "--stop-if-idle") {
+            use straja::protocol::{call, Request, Response};
+            if call(Request::State).await.is_ok() {
+                match call(Request::Shutdown).await? {
+                    Response::Ok(_) => {},
+                    other => anyhow::bail!("Cannot stop agent: {other:?}. Wait for active work to finish."),
+                }
+                for _ in 0..50 {
+                    if call(Request::State).await.is_err() { return Ok(()); }
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                }
+                anyhow::bail!("The agent has not stopped yet.");
+            }
+            return Ok(());
+        }
         if args.iter().any(|a| a == "--status") {
             println!(
                 "{}",
@@ -97,11 +136,18 @@ fn run() -> Result<()> {
         }
         let (tx, rx) = tokio::sync::watch::channel(false);
         // Interactive session only; Windows services never display UI in session 0.
+        #[cfg(windows)]
         if !args.iter().any(|a| a == "--vss-start") && let Err(e) = straja::tray::launch() {
             eprintln!("Pictograma Straja: {e:#}");
         }
         tokio::spawn(async move {
+            #[cfg(windows)]
             let _ = tokio::signal::ctrl_c().await;
+            #[cfg(unix)]
+            {
+                let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).expect("SIGTERM handler");
+                tokio::select! { _ = tokio::signal::ctrl_c() => {}, _ = terminate.recv() => {} }
+            }
             let _ = tx.send(true);
         });
         straja::worker::run(root, restic, false, rx).await

@@ -16,12 +16,7 @@ use std::{
 };
 
 fn open_input(path: &Path) -> Result<File> {
-    use std::os::windows::fs::OpenOptionsExt;
-    let file = OpenOptions::new()
-        .read(true)
-        .share_mode(1)
-        .custom_flags(0x00200000)
-        .open(path)?;
+    let file = crate::platform::open_read(path)?;
     not_link(&file.metadata()?, path)?;
     ensure!(
         file.metadata()?.is_file(),

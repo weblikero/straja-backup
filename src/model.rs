@@ -205,6 +205,7 @@ pub fn validate_empty_repository(path: &Path) -> Result<()> {
 fn canonical(path: &Path) -> Result<PathBuf> {
     Ok(std::fs::canonicalize(path)?)
 }
+#[cfg(windows)]
 pub fn overlaps(a: &Path, b: &Path) -> bool {
     // Canonicalize before this check, resolving Windows junctions and symlinks.
     let a = a.to_string_lossy().replace('/', "\\").to_lowercase();
@@ -212,6 +213,11 @@ pub fn overlaps(a: &Path, b: &Path) -> bool {
     let a = a.trim_end_matches('\\');
     let b = b.trim_end_matches('\\');
     a == b || a.starts_with(&format!("{b}\\")) || b.starts_with(&format!("{a}\\"))
+}
+
+#[cfg(unix)]
+pub fn overlaps(a: &Path, b: &Path) -> bool {
+    a.starts_with(b) || b.starts_with(a)
 }
 
 impl NewPlan {

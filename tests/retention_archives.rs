@@ -187,14 +187,17 @@ async fn retention_default_edit_failure_unknown_files_and_clock_reversal() -> Re
         3,
         "Editing must not delete anything"
     );
-    use std::os::windows::fs::OpenOptionsExt;
-    let locked = fs::OpenOptions::new()
-        .read(true)
-        .share_mode(0)
-        .open(edited.sources[0].join("notițe.txt"))?;
-    assert!(f.engine.backup(&edited).await.is_err());
-    assert_eq!(f.engine.snapshots(&edited).await?.len(), 3);
-    drop(locked);
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        let locked = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(edited.sources[0].join("notițe.txt"))?;
+        assert!(f.engine.backup(&edited).await.is_err());
+        assert_eq!(f.engine.snapshots(&edited).await?.len(), 3);
+        drop(locked);
+    }
     // A newer wall clock on old snapshots must never cause deletion of the just-completed copy.
     for copy in &originals {
         let path = edited

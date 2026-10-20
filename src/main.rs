@@ -1,6 +1,16 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod ui;
 fn main() -> iced::Result {
+    if std::env::args().any(|a| a == "--version") {
+        println!(
+            "Straja Backup {} ({}/{})",
+            env!("CARGO_PKG_VERSION"),
+            std::env::consts::OS,
+            std::env::consts::ARCH
+        );
+        return Ok(());
+    }
+    #[cfg(windows)]
     if let Some(path) = std::env::args_os()
         .skip_while(|a| a != "--apply-update")
         .nth(1)
@@ -18,13 +28,16 @@ fn main() -> iced::Result {
         return ui::preview();
     }
     straja::i18n::reload();
+    #[cfg(windows)]
     if straja::updater::running() {
         straja::updater::notify(&straja::i18n::tr(
             "Actualizarea Straja este în curs. Aplicația se va redeschide la final.",
         ));
         return Ok(());
     }
+    #[cfg(windows)]
     let _ = straja::tray::launch();
+    #[cfg(windows)]
     if straja::tray::show_existing_window() {
         return Ok(());
     }
