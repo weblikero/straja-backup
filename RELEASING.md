@@ -46,6 +46,12 @@ GitHub API reference: https://docs.github.com/en/rest/releases/releases#get-the-
 
 ## Current validation status
 
+Version 0.8.0 passed the Windows regression, remote integration, strict Clippy and
+isolated installer checks. Native packages additionally require successful jobs
+for Ubuntu x64 and both Mac architectures on the exact release commit; see the
+native release gate below. Interactive desktop consent, native autostart and
+Apple signing/notarization remain separate checks documented in `VALIDATION.md`.
+
 Version 0.7.1 passed 80 regression tests, the three isolated online tests, strict Clippy, formatting and the isolated installer lifecycle. The exclusion-removal and first-step save changes were tested automatically; the native UI was not visually exercised. Earlier cloud-account and full update/UAC/SCM limitations remain as described below.
 
 Version 0.7.0 passed 79 regression tests, isolated FTP and HTTPS S3-compatible roundtrips, strict Clippy and the isolated installer lifecycle including the new Rclone file lock. Real Google Drive/Dropbox consent and refresh, external FTPS and Amazon account permissions/quotas still need account-specific validation. The native form could not be visually inspected in the available desktop session. See `REMOTE.md` and `VALIDATION.md`.

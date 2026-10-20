@@ -14,6 +14,19 @@ use zeroize::Zeroizing;
 static KEY_LOCK: Mutex<()> = Mutex::new(());
 const PREFIX: &[u8] = b"STRAJA-AES1";
 
+fn keychain_account() -> String {
+    // Every integration test is a different unsigned executable. On disposable
+    // Mac CI each one must create its own item to avoid cross-binary consent.
+    // Release builds always use the stable account, including after upgrades.
+    #[cfg(all(target_os = "macos", debug_assertions))]
+    if std::env::var("GITHUB_ACTIONS").as_deref() == Ok("true")
+        && let Ok(namespace) = std::env::var("STRAJA_CI_KEYCHAIN_NAMESPACE")
+    {
+        return format!("ci-{namespace}-{}", std::process::id());
+    }
+    "database-wrapping-key-v1".into()
+}
+
 pub fn private_directory(path: &Path) -> Result<()> {
     use std::os::unix::fs::{DirBuilderExt, MetadataExt};
     let mut builder = std::fs::DirBuilder::new();
@@ -45,7 +58,7 @@ fn key(create: bool) -> Result<Zeroizing<Vec<u8>>> {
     let _lock = KEY_LOCK
         .lock()
         .map_err(|_| anyhow::anyhow!("Keychain lock failed"))?;
-    let entry = keyring::Entry::new("com.weblike.straja-backup", "database-wrapping-key-v1")?;
+    let entry = keyring::Entry::new("com.weblike.straja-backup", &keychain_account())?;
     let bytes = match entry.get_secret() {
         Ok(bytes) => bytes,
         Err(keyring::Error::NoEntry) if create => {

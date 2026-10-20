@@ -2,6 +2,10 @@
 # Disposable native CI machines only; never run against a user's installation.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+if [[ "${GITHUB_ACTIONS:-}" != true ]]; then
+  echo "Installation smoke tests require a disposable GitHub Actions runner." >&2
+  exit 1
+fi
 start_agent() {
   "$base/straja-agent" > /tmp/straja-agent.log 2>&1 &
   agent=$!

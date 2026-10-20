@@ -208,6 +208,7 @@ Source: "..\RCLONE-LICENSE.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\REMOTE.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "assets\straja.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\NATIVE.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\VSS.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.ro.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion

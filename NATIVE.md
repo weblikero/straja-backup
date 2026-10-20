@@ -78,9 +78,10 @@ Do not synchronize a live database between operating systems.
 runners. It runs native regression tests, Restic backup/restore and strict Clippy,
 then packages checksum-verified Restic/Rclone with the app and license notices.
 `scripts/test-unix.sh` is for disposable CI accounts only (it starts a test keyring).
-On Mac CI it creates and removes an ephemeral Keychain item accessible to the
-separate test executables. User consent prompts and access after upgrading a
-signed application still need interactive validation; production ACLs are unchanged.
+On Mac CI each unsigned test executable uses its own ephemeral Keychain item,
+with normal ACLs. Release builds always use the stable production account.
+User consent prompts and access after upgrading a signed application still
+need interactive validation.
 `python3 scripts/package-unix.py` builds the package on its target OS after
 `cargo build --locked --release`; `--tools-only` downloads the backup engines.
 

@@ -6,7 +6,7 @@ Windows keeps its existing installer and in-app upgrade flow. The initial native
 package upgrades after an in-app notification; macOS packages are not Developer ID signed/notarized.
 
 
-Open-source backup and restore for Windows, created by [Weblike PRO](https://weblike.ro/). Licensed under MIT. Product website: [strajabackup.com](https://strajabackup.com/).
+Open-source backup and restore for Windows, Ubuntu and macOS, created by [Weblike PRO](https://weblike.ro/). Licensed under MIT. Product website: [strajabackup.com](https://strajabackup.com/).
 
 Version **0.8.0** is a preview for Windows x64 (Windows 10 version 1809 or later, including Windows 11). The desktop app and background agent are written in Rust. Encrypted backups use the bundled Restic 0.19.1. Ordinary files and ZIP, TAR.GZ and 7z archives do not require Restic or a separate archive utility.
 

@@ -14,14 +14,11 @@ if [[ "$(uname -s)" == Linux ]]; then
   export GNOME_KEYRING_CONTROL="$(mktemp -d)"
   printf 'ci-only-password' | gnome-keyring-daemon --unlock --components=secrets
 else
-  # Each Rust integration test is a different executable. Without an explicit
-  # test ACL, Keychain prompts for consent when the next test accesses the key
-  # created by the previous binary, blocking an unattended runner.
-  # No -U: refuse to replace an existing item. This ephemeral CI key is never
-  # included in a package, and production code keeps the normal Keychain ACL.
-  security add-generic-password -a database-wrapping-key-v1 \
-    -s com.weblike.straja-backup -w "$(openssl rand -hex 16)" -A
-  trap 'security delete-generic-password -a database-wrapping-key-v1 -s com.weblike.straja-backup >/dev/null 2>&1' EXIT
+  # Separate unsigned test executables need separate items: even a permissive
+  # ACL can prompt for consent across code identities on current macOS.
+  # This namespace is honored only in Mac debug builds on GitHub Actions.
+  # Keychain entries disappear with the disposable runner, never in artifacts.
+  export STRAJA_CI_KEYCHAIN_NAMESPACE="$(uuidgen)"
 fi
 cargo test --locked --all-targets --no-fail-fast
 cargo test --locked --test restic_roundtrip -- --ignored
