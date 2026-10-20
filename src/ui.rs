@@ -2806,6 +2806,13 @@ impl App {
                         button(text("Anulează")).style(button::text).on_press_maybe((!w.exclusion_input.is_empty() || w.exclusion_edit.is_some()).then_some(Message::CancelExclusion))
                     ].spacing(12))
                     .push(text("Acceptă / și \\. Calea este păstrată exact, fără a urma legăturile/junction-urile. Poți introduce și un folder care nu există momentan.").size(12).color(MUTED));
+                if let Some(i) = w.exclusion_edit {
+                    content = content.push(
+                        button(text("Elimină excluderea"))
+                            .style(button::danger)
+                            .on_press_maybe((!self.busy).then_some(Message::RemoveExclusion(i))),
+                    );
+                }
                 for (i, path) in w.excluded_paths.iter().enumerate() {
                     content = content.push(
                         row![
@@ -2813,14 +2820,17 @@ impl App {
                             button(text("Editează"))
                                 .style(button::text)
                                 .on_press(Message::EditExclusion(i)),
-                            button(text("Include din nou"))
-                                .style(button::text)
-                                .on_press(Message::RemoveExclusion(i))
+                            button(text("Elimină excluderea"))
+                                .style(button::danger)
+                                .on_press_maybe(
+                                    (!self.busy).then_some(Message::RemoveExclusion(i))
+                                )
                         ]
                         .spacing(10),
                     );
                 }
                 content = content
+                    .push(text("Eliminarea unei excluderi include din nou calea în backupurile viitoare. Fișierele nu sunt șterse. Modificările se aplică după Salvează planul.").size(13).color(MUTED))
                     .push(text("Reguli avansate opționale, separate prin ;").size(13))
                     .push(
                         text_input(&tr("De exemplu: *.tmp; node_modules; target"), &w.excludes)
@@ -3032,6 +3042,17 @@ impl App {
         }
         if !w.error.is_empty() {
             content = content.push(text(&w.error).color(Color::from_rgb(0.78, 0.22, 0.25)));
+        }
+        if w.editing.is_some() && w.step == 0 {
+            content = content.push(
+                button(text(if self.busy {
+                    "Se salvează…"
+                } else {
+                    "Salvează planul"
+                }))
+                .padding([12, 22])
+                .on_press_maybe((!self.busy).then_some(Message::Save)),
+            );
         }
         content = content.push(horizontal_rule(1)).push(row![
             button(text("Înapoi"))
@@ -3730,5 +3751,42 @@ mod tests {
                 && w.exclusion_input.is_empty()
                 && w.exclusion_edit.is_none()
         );
+    }
+
+    #[test]
+    fn removed_exclusion_can_be_saved_directly_from_first_edit_step() {
+        let (mut app, _) = App::new();
+        let mut w = Wizard::default();
+        w.editing = Some("existing-plan".into());
+        w.name = "Existing plan".into();
+        w.mode = BackupMode::Plain;
+        w.sources = vec![PathBuf::from(r"C:\A")];
+        w.repository = Some(PathBuf::from(r"E:\Backup"));
+        w.excluded_paths = vec![PathBuf::from(r"C:\A\cache")];
+        w.excludes = "*.tmp".into();
+        app.wizard = Some(w);
+        let _ = app.update(Message::EditExclusion(0));
+        let _ = app.update(Message::ManualExclusion(String::new()));
+        let _ = app.update(Message::RemoveExclusion(0));
+        let w = app.wizard.as_ref().unwrap();
+        assert_eq!(w.step, 0);
+        assert!(w.validate_step().is_ok());
+        assert!(w.excluded_paths.is_empty());
+        assert_eq!(w.excludes, "*.tmp");
+        // Construct the asynchronous save; do not contact the user's agent in a unit test.
+        let _ = app.update(Message::Save);
+        assert!(app.busy);
+        assert!(app.wizard.as_ref().unwrap().error.is_empty());
+        let _ = app.update(Message::Saved(Ok(Response::Error(
+            "test save failure".into(),
+        ))));
+        let w = app.wizard.as_ref().unwrap();
+        assert!(
+            w.excluded_paths.is_empty(),
+            "A failed save must keep the edited draft"
+        );
+        assert_eq!(w.error, "test save failure");
+        let _ = app.update(Message::Saved(Ok(Response::Ok("saved".into()))));
+        assert!(app.wizard.is_none());
     }
 }

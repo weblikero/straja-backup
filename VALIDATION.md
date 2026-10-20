@@ -1,4 +1,13 @@
-# Validare — 19 octombrie 2026
+# Validare — 20 octombrie 2026
+
+### Exclusion removal workflow — 0.7.1 (2026-10-20)
+
+- The existing removal handler already removed a selected exclusion from the wizard draft. The old **Include again** label and the requirement to finish all wizard steps before saving made removal and persistence unclear. The report's exact click sequence was not reproduced on the installed application; no unrelated plan data was changed.
+- Renamed the action to **Remove exclusion**, with a visible button in each row and in the active path editor. An empty editor does not prevent using the explicit removal button. Existing plans now offer **Save plan** directly on the sources/exclusions step; the other settings retain the existing validated update flow. Closing without saving still discards the draft.
+- Added a UI regression for removing an actively edited/emptied path, saving from step zero and preserving the edited draft if saving fails. The selected-exclusions integration test now reopens the stored plan before the next backup and asserts that selected exclusions remain removed while wildcard rules remain intact. New explanatory messages are included in all seven languages.
+- The native UI has not been visually exercised in this session. Previous real-cloud-account, UAC/SCM update-handoff and digital-signing limitations remain applicable.
+- `scripts/test.ps1` passed 80 tests, including the new first-step save regression and the reopened-plan exclusion test. The three online integration tests, strict all-target/all-feature Clippy and formatting check passed. Logs: `test-output/tests-0.7.1.log`, `test-output/remote-0.7.1.log`, `test-output/clippy-0.7.1.log`.
+- The optimized production build and isolated 0.7.1 installer lifecycle passed: installation, upgrade with the in-app arguments, Windows registration, refusal of locked GUI/transfer files, uninstall and preservation of test data. Logs: `test-output/installer-lifecycle-0.7.1.log`, `test-output/installer-c992045711b14a4b92655aed1b0afaf4`. The user's actual installation and plans were not edited.
 
 ### Online destinations — 0.7.0 (2026-10-19)
 

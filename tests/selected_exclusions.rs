@@ -157,7 +157,16 @@ async fn exercise(mode: BackupMode) -> Result<()> {
             schedule: plan.schedule.clone(),
         },
     )?;
-    engine.backup(&edited).await?;
+    let reopened = Store::open(&engine.store.root)?.plan(&edited.id)?;
+    assert!(
+        reopened.excluded_paths.is_empty(),
+        "Removed exclusions must stay removed after reopening the plan"
+    );
+    assert_eq!(
+        reopened.excludes, plan.excludes,
+        "Keep the separate wildcard rules"
+    );
+    engine.backup(&reopened).await?;
     let latest = engine.snapshots(&edited).await?.remove(0);
     let restored_again = temp.path().join("restore-new");
     fs::create_dir(&restored_again)?;
