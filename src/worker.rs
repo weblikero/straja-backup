@@ -428,7 +428,7 @@ mod tests {
             tasks: JoinSet::new(),
             engine: Engine {
                 binary: PathBuf::new(),
-                store: Store::open(root.path()).unwrap(),
+                store: Store::open(&root.path().join("state")).unwrap(),
                 live: Arc::new(Mutex::new(None)),
             },
         };
@@ -533,7 +533,7 @@ mod tests {
     #[tokio::test]
     async fn compact_status_matches_history_without_transferring_details() {
         let tmp = tempfile::tempdir().unwrap();
-        let store = Store::open(tmp.path()).unwrap();
+        let store = Store::open(&tmp.path().join("state")).unwrap();
         let completed = Run {
             id: "done".into(),
             plan_id: "removed-plan".into(),
@@ -643,7 +643,7 @@ mod tests {
             shutdown_requested: false,
             engine: Engine {
                 binary: PathBuf::new(),
-                store: Store::open(root.path()).unwrap(),
+                store: Store::open(&root.path().join("state")).unwrap(),
                 live: Arc::new(Mutex::new(Some(Progress::default()))),
             },
             service_mode: false,

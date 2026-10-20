@@ -63,7 +63,7 @@ async fn unix_agent_runs_backup_preserves_state_and_prevents_duplicate_listener(
         keep_last: Some(2),
         schedule: Schedule::Manual,
     })?;
-    let socket = temp.path().join("agent.sock");
+    let socket = root.join("agent.sock");
     let (_tx, rx) = tokio::sync::watch::channel(false);
     let agent = tokio::spawn(straja::worker::run_on_pipe(
         root.clone(),

@@ -7032,5 +7032,19 @@
       "La version publiée ne contient pas de paquet pour ce système et ce processeur.",
       "La versione pubblicata non contiene un pacchetto per questo sistema e processore."
     ]
+  },
+  {
+    "source": "Agentul are altă versiune. Așteaptă terminarea operațiilor, apoi repornește agentul din instalarea curentă.",
+    "parts": [
+      "Agentul are altă versiune. Așteaptă terminarea operațiilor, apoi repornește agentul din instalarea curentă."
+    ],
+    "values": [
+      "The agent has a different version. Wait for operations to finish, then restart the agent from the current installation.",
+      "Der Agent hat eine andere Version. Warte auf den Abschluss der Vorgänge und starte den Agenten aus der aktuellen Installation neu.",
+      "El agente tiene otra versión. Espera a que terminen las operaciones y reinícialo desde la instalación actual.",
+      "O agente tem outra versão. Aguarda o fim das operações e reinicia-o a partir da instalação atual.",
+      "L’agent utilise une autre version. Attendez la fin des opérations, puis redémarrez l’agent depuis l’installation actuelle.",
+      "L’agente ha una versione diversa. Attendi la fine delle operazioni, poi riavvialo dall’installazione attuale."
+    ]
   }
 ]

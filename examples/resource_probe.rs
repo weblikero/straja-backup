@@ -9,7 +9,7 @@ use straja::{
 
 fn main() -> Result<()> {
     let root = tempfile::tempdir()?;
-    let store = Store::open(root.path())?;
+    let store = Store::open(&root.path().join("state"))?;
     for i in 0..100 {
         store.put_run(&Run {
             id: i.to_string(),
@@ -35,7 +35,7 @@ fn main() -> Result<()> {
             .into_owned();
         let (tx, rx) = tokio::sync::watch::channel(false);
         let worker = tokio::spawn(straja::worker::run_on_pipe(
-            root.path().to_owned(),
+            store.root.clone(),
             root.path().join("absent-restic.exe"),
             false,
             rx,

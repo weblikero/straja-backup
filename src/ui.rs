@@ -1992,9 +1992,9 @@ impl App {
             body = body.push(self.update_card(false));
         }
         if !self.connected {
-            body = body.push(card(column![text("Pornește agentul pentru a accesa planurile").size(19), text("Agentul execută backupurile și rămâne activ după închiderea ferestrei. Pentru pornire automată la boot, instalează serviciul Windows.").size(14), button(text("Pornește agentul")).on_press_maybe((!self.busy).then_some(Message::StartAgent)).padding([10,16])].spacing(12)));
+            body = body.push(card(column![text("Pornește agentul pentru a accesa planurile").size(19), text(if cfg!(windows) { "Agentul execută backupurile și rămâne activ după închiderea ferestrei. Pentru pornire automată la boot, instalează serviciul Windows." } else { "Agentul continuă după închiderea ferestrei. Poți activa pornirea automată la autentificare. Keyring-ul contului trebuie să fie deblocat pentru acces la parole." }).size(14), button(text("Pornește agentul")).on_press_maybe((!self.busy).then_some(Message::StartAgent)).padding([10,16])].spacing(12)));
         } else if !self.compatible() {
-            body = body.push(card(text("Rulează încă un agent din versiunea veche. După terminarea operațiilor, închide Straja și oprește straja-agent.exe din Task Manager (sau repornește Windows), apoi deschide aplicația instalată și pornește agentul.").color(Color::from_rgb(0.78, 0.22, 0.25))));
+            body = body.push(card(text(if cfg!(windows) { "Rulează încă un agent din versiunea veche. După terminarea operațiilor, închide Straja și oprește straja-agent.exe din Task Manager (sau repornește Windows), apoi deschide aplicația instalată și pornește agentul." } else { "Agentul are altă versiune. Așteaptă terminarea operațiilor, apoi repornește agentul din instalarea curentă." }).color(Color::from_rgb(0.78, 0.22, 0.25))));
         } else if !self.state.engine_available {
             body = body.push(card(
                 text("Motorul Restic lipsește pentru planurile criptate. Modul cu fișiere necriptate nu necesită Restic.")
@@ -2880,7 +2880,7 @@ impl App {
                     ].spacing(12));
                 content = content
                     .push(text(if w.exclusion_edit.is_some() { "Editează calea exclusă" } else { "Sau introdu manual calea completă" }).size(14))
-                    .push(text_input(&tr("C:/laragon/www/example-suite/public/build"), &w.exclusion_input)
+                    .push(text_input(if cfg!(windows) { "C:/laragon/www/example-suite/public/build" } else if cfg!(target_os = "macos") { "/Users/name/Projects/cache" } else { "/home/name/Projects/cache" }, &w.exclusion_input)
                         .on_input(Message::ManualExclusion).on_submit(Message::SaveExclusion).padding(10))
                     .push(row![
                         button(text(if w.exclusion_edit.is_some() { "Salvează calea" } else { "Adaugă excluderea" }))
