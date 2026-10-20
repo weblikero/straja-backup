@@ -44,6 +44,8 @@ jobs:
         run: |
           cargo build --locked --release
           python3 scripts/package-unix.py
+      - name: Install package and launch native GUI
+        run: bash scripts/smoke-native.sh
       - uses: actions/upload-artifact@v4
         with:
           name: straja-${{ runner.os }}-${{ runner.arch }}

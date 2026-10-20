@@ -25,7 +25,14 @@ fn main() -> Result<()> {
     straja::resources::background_process()?;
     let runtime = straja::resources::runtime()?;
     runtime.block_on(async {
+        #[cfg(windows)]
         let pipe_name = format!(r"\\.\pipe\StrajaProbe-{}", uuid::Uuid::new_v4());
+        #[cfg(unix)]
+        let pipe_name = root
+            .path()
+            .join("probe.sock")
+            .to_string_lossy()
+            .into_owned();
         let (tx, rx) = tokio::sync::watch::channel(false);
         let worker = tokio::spawn(straja::worker::run_on_pipe(
             root.path().to_owned(),
@@ -56,8 +63,11 @@ fn main() -> Result<()> {
                 if Instant::now() < *next {
                     continue;
                 }
+                #[cfg(windows)]
                 let mut pipe =
                     tokio::net::windows::named_pipe::ClientOptions::new().open(&pipe_name)?;
+                #[cfg(unix)]
+                let mut pipe = tokio::net::UnixStream::connect(&pipe_name).await?;
                 protocol::write(&mut pipe, &request).await?;
                 let response: Response = protocol::read(&mut pipe).await?;
                 bytes += serde_json::to_vec(&response)?.len();

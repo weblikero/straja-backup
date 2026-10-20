@@ -51,3 +51,20 @@ Version 0.7.1 passed 80 regression tests, the three isolated online tests, stric
 Version 0.7.0 passed 79 regression tests, isolated FTP and HTTPS S3-compatible roundtrips, strict Clippy and the isolated installer lifecycle including the new Rclone file lock. Real Google Drive/Dropbox consent and refresh, external FTPS and Amazon account permissions/quotas still need account-specific validation. The native form could not be visually inspected in the available desktop session. See `REMOTE.md` and `VALIDATION.md`.
 
 The 0.6.2 isolated installer lifecycle and 74 Rust tests passed. Installation, upgrade, uninstall, registration, locked-file protection, updater installer arguments and data preservation were exercised. The full GitHub download/helper/restart path, all-users elevation and actual installed SCM service restart have not yet been exercised end to end. After these limitations were explained, the project owner directed stable publication and automatic discovery on 2026-10-19; the earlier draft-only publication hold is superseded. Keep the limitations visible and complete those disposable-machine checks in future validation. See `VALIDATION.md`.
+
+## Native Linux and macOS release assets (0.8.0+)
+
+Run `.github/workflows/native.yml` on the exact release commit. Download all three
+successful runner artifacts into `dist/native` (flatten their contents). Verify the
+workflow head SHA, the version in each filename, and all SHA-256 sidecars before
+publishing. Native compilation, regression tests, package installation and GUI startup
+smoke tests must pass. The scripts now require all six native packages and their
+sidecars, in addition to the Windows installer/portable ZIP, before stable publication.
+Do not publish a Windows-only Latest release that breaks native update discovery.
+
+Native asset names: `StrajaBackup-X.Y.Z-ubuntu-x64.deb`, `-linux-x64.tar.gz`,
+`-macos-arm64.dmg`, `-macos-arm64.tar.gz`, `-macos-x64.dmg`, `-macos-x64.tar.gz`.
+The matching OS/architecture is selected by native clients. Initial native clients
+notify and link to the release page; Windows automatic installer handoff is unchanged.
+Mac packages are ad-hoc signed only until Developer ID and notarization are configured.
+See NATIVE.md for keychain, snapshots, autostart and manual validation limitations.

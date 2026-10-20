@@ -15,7 +15,7 @@ A graphical session, X11/Wayland libraries and a Secret Service such as GNOME Ke
 are required. Unlock the login keyring to save/access encrypted repository passwords
 or cloud credentials. There is no plaintext credential fallback.
 
-To start the agent automatically when you log in, run as your normal user:
+In **About**, choose **Start agent automatically at login**, or run as your normal user:
 
     /opt/straja-backup/enable-autostart.sh
 
@@ -38,7 +38,7 @@ Passwords use the login Keychain. macOS may ask you to authorize access. Protect
 folders may require Files & Folders or Full Disk Access permission for the app/agent
 in System Settings. Grant only the access needed for your selected sources.
 
-Optional startup at login, after installation:
+Optional startup at login: use **About → Start agent automatically at login**, or run after installation:
 
     "/Applications/Straja Backup.app/Contents/MacOS/enable-autostart.sh"
 
@@ -83,3 +83,7 @@ then packages checksum-verified Restic/Rclone with the app and license notices.
 
 Signing/notarization and interactive usability on physical Mac/Ubuntu machines
 remain separate release checks; a successful CI build does not certify them.
+
+Developer references: [Apple distribution and notarization](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution),
+[keyring native stores](https://docs.rs/keyring/3.6.3/keyring/),
+[GitHub hosted runner platforms](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).

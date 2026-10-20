@@ -4,7 +4,13 @@ $projectRoot = Split-Path $PSScriptRoot -Parent
 $repository = 'weblikero/straja-backup'
 $tag = "v$Version"
 $expected = @{}
-foreach ($relative in @("dist\installer\StrajaBackup-$Version-windows-x64-setup.exe", "dist\StrajaBackup-$Version-windows-x64-portable.zip")) {
+$artifacts = @("dist\installer\StrajaBackup-$Version-windows-x64-setup.exe", "dist\StrajaBackup-$Version-windows-x64-portable.zip")
+if ([version]$Version -ge [version]'0.8.0') {
+    foreach ($suffix in @('ubuntu-x64.deb','linux-x64.tar.gz','macos-arm64.dmg','macos-arm64.tar.gz','macos-x64.dmg','macos-x64.tar.gz')) {
+        $artifacts += "dist\native\StrajaBackup-$Version-$suffix"
+    }
+}
+foreach ($relative in $artifacts) {
     $path = Join-Path $projectRoot $relative
     $sidecar = "$path.sha256"
     $hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()

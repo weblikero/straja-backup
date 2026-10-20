@@ -15,6 +15,11 @@ try {
     $portable = "dist\StrajaBackup-$version-windows-x64-portable.zip"
     $artifacts = @($portable)
     if (!$PortableOnly) { $artifacts += "dist\installer\StrajaBackup-$version-windows-x64-setup.exe" }
+    if ([version]$version -ge [version]'0.8.0') {
+        foreach ($suffix in @('ubuntu-x64.deb','linux-x64.tar.gz','macos-arm64.dmg','macos-arm64.tar.gz','macos-x64.dmg','macos-x64.tar.gz')) {
+            $artifacts += "dist\native\StrajaBackup-$version-$suffix"
+        }
+    }
     $assets = @()
     foreach ($artifact in $artifacts) {
         $sidecar = "$artifact.sha256"
