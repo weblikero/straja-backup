@@ -36,7 +36,7 @@ async fn call(path: &Path, value: Request) -> Result<Response> {
     let mut stream = tokio::net::UnixStream::connect(path).await?;
     straja::unix_transport::verify_peer(&stream)?;
     protocol::write(&mut stream, &value).await?;
-    Ok(protocol::read(&mut stream).await?)
+    protocol::read(&mut stream).await
 }
 
 #[tokio::test]

@@ -53,6 +53,15 @@ pub fn restic_budget(command: &mut tokio::process::Command) {
     );
 }
 
+#[cfg(unix)]
+pub fn background_process() -> std::io::Result<()> {
+    if unsafe { libc::setpriority(libc::PRIO_PROCESS, 0, 10) } == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -77,14 +86,5 @@ mod tests {
         assert_eq!(vars["GOMEMLIMIT"], "512MiB");
         assert_eq!(vars["RESTIC_READ_CONCURRENCY"], "1");
         assert_eq!(std::env::var_os("GOMAXPROCS"), previous);
-    }
-}
-
-#[cfg(unix)]
-pub fn background_process() -> std::io::Result<()> {
-    if unsafe { libc::setpriority(libc::PRIO_PROCESS, 0, 10) } == 0 {
-        Ok(())
-    } else {
-        Err(std::io::Error::last_os_error())
     }
 }
