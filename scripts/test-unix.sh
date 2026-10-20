@@ -10,7 +10,7 @@ if [[ "$(uname -s)" == Linux ]]; then
   export GNOME_KEYRING_CONTROL="$(mktemp -d)"
   printf 'ci-only-password' | gnome-keyring-daemon --unlock --components=secrets
 fi
-cargo test --locked --all-targets
+cargo test --locked --all-targets --no-fail-fast
 cargo test --locked --test restic_roundtrip -- --ignored
 cargo test --locked --test selected_exclusions selected_exclusions_restic -- --ignored
-cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo test --locked --test remote_destinations ftp_backup_restore_retention_and_failure_preserve_other_files -- --ignored

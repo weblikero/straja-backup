@@ -96,7 +96,8 @@ async fn ftp_backup_restore_retention_and_failure_preserve_other_files() -> Resu
         let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
         let port = listener.local_addr()?.port();
         drop(listener);
-        let mut command = tokio::process::Command::new(tools.join("rclone.exe"));
+        let mut command =
+            tokio::process::Command::new(tools.join(straja::platform::executable("rclone")));
         straja::resources::restic_budget(&mut command);
         command
             .args(["serve", "ftp"])
@@ -137,11 +138,14 @@ async fn ftp_backup_restore_retention_and_failure_preserve_other_files() -> Resu
         // Exercise Restic's CSV/command quoting for installations under paths with spaces.
         let binaries = temp.path().join("tools with spaces");
         std::fs::create_dir(&binaries)?;
-        for name in ["restic.exe", "rclone.exe"] {
+        for name in [
+            straja::platform::executable("restic"),
+            straja::platform::executable("rclone"),
+        ] {
             std::fs::hard_link(tools.join(name), binaries.join(name))?;
         }
         let engine = Engine {
-            binary: binaries.join("restic.exe"),
+            binary: binaries.join(straja::platform::executable("restic")),
             store: store.clone(),
             live: Default::default(),
         };
@@ -236,7 +240,8 @@ async fn s3_transport_roundtrip_with_isolated_server() -> Result<()> {
         let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
         let port = listener.local_addr()?.port();
         drop(listener);
-        let mut command = tokio::process::Command::new(tools.join("rclone.exe"));
+        let mut command =
+            tokio::process::Command::new(tools.join(straja::platform::executable("rclone")));
         straja::resources::restic_budget(&mut command);
         let mut server = command
             .args(["serve", "s3"])
@@ -298,8 +303,15 @@ async fn s3_transport_roundtrip_with_isolated_server() -> Result<()> {
                 restored.to_string_lossy().into_owned(),
             ],
         ] {
-            let mut cmd = tokio::process::Command::new(tools.join("restic.exe"));
-            straja::remote::configure(&mut cmd, &tools.join("rclone.exe"), &d, &c).await?;
+            let mut cmd =
+                tokio::process::Command::new(tools.join(straja::platform::executable("restic")));
+            straja::remote::configure(
+                &mut cmd,
+                &tools.join(straja::platform::executable("rclone")),
+                &d,
+                &c,
+            )
+            .await?;
             // Test-only endpoint override. Production config always uses Amazon's HTTPS endpoints.
             cmd.env(
                 "RCLONE_CONFIG_STRAJA_ENDPOINT",
@@ -314,7 +326,7 @@ async fn s3_transport_roundtrip_with_isolated_server() -> Result<()> {
             let program = format!(
                 "rclone.program=\"{}\"",
                 tools
-                    .join("rclone.exe")
+                    .join(straja::platform::executable("rclone"))
                     .to_string_lossy()
                     .replace('\\', "/")
             );

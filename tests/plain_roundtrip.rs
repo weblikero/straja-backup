@@ -86,9 +86,14 @@ async fn readable_versions_restore_exclusions_and_edit_without_password() -> Res
         "single source"
     );
     assert!(files.join("01-Documente și poze/gol").is_dir());
-    for excluded in ["StrajaState", "cache", "temporar.TMP"] {
+    for excluded in ["StrajaState", "cache"] {
         assert!(!files.join("01-Documente și poze").join(excluded).exists());
     }
+    assert_eq!(
+        files.join("01-Documente și poze/temporar.TMP").exists(),
+        cfg!(unix),
+        "Unix wildcard exclusions are case-sensitive; Windows exclusions are not"
+    );
     assert_eq!(
         fs::metadata(&document)?.modified()?,
         fs::metadata(f.plan.sources[0].join("notițe.txt"))?.modified()?
